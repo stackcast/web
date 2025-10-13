@@ -72,6 +72,7 @@ export interface OrderRequest {
   salt?: string
   expiration?: number
   signature?: string
+  publicKey?: string // Required for signature verification
 }
 
 export interface OrderResponse {
