@@ -107,8 +107,6 @@ export function MarketDetail() {
     [combinedOrderbook]
   )
 
-  const positionIdForOutcome = outcome === 'yes' ? market?.yesPositionId : market?.noPositionId
-
   const onSubmitOrder = async (event: FormEvent) => {
     event.preventDefault()
     if (!market) return
@@ -129,25 +127,26 @@ export function MarketDetail() {
       return
     }
 
-    if (!positionIdForOutcome) {
-      setErrorMessage('Unable to resolve position id for outcome.')
-      setSuccessMessage(undefined)
-      return
-    }
-
     try {
       setErrorMessage(undefined)
 
       // Generate order parameters
       const salt = generateSalt()
       const expiration = calculateExpiration(1) // 1 hour from now
-      const takerAmount = numericSize * numericPrice // Calculate taker amount
+      const takerAmount = Math.floor(numericSize * numericPrice) // Calculate taker amount
 
-      // Compute order hash for signing
-      const orderHash = computeOrderHash(
+      // Derive maker and taker position IDs based on side
+      // BUY: maker gets YES, taker gets NO
+      // SELL: maker gets NO, taker gets YES
+      const makerPositionId = side === 'BUY' ? market.yesPositionId : market.noPositionId
+      const takerPositionId = side === 'BUY' ? market.noPositionId : market.yesPositionId
+
+      // Compute order hash for signing (now async)
+      const orderHash = await computeOrderHash(
         maker,
         maker, // Use maker as taker for limit orders
-        positionIdForOutcome,
+        makerPositionId,
+        takerPositionId,
         numericSize,
         takerAmount,
         salt,
@@ -163,11 +162,13 @@ export function MarketDetail() {
       const signResult = await signMessage(orderHashHex)
 
       // Submit order with signature and publicKey for verification
+      // Server will derive position IDs if not provided, but we provide them explicitly
       await api.placeOrder({
         maker,
         marketId: market.marketId,
         conditionId: market.conditionId,
-        positionId: positionIdForOutcome,
+        makerPositionId,
+        takerPositionId,
         side,
         price: numericPrice,
         size: numericSize,
