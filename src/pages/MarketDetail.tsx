@@ -1,5 +1,5 @@
 import type { FormEvent } from 'react'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -9,6 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useApiQuery } from '@/hooks/use-api'
 import { api } from '@/lib/api-client'
+import { useWallet } from '@/contexts/WalletContext'
+import { computeOrderHash, generateSalt, calculateExpiration } from '@/utils/orderSigning'
 import type { CombinedOrderbook, OrderSide, OrderbookLevel, Trade } from '@/types/api'
 
 type Outcome = 'yes' | 'no'
@@ -37,6 +39,7 @@ const outcomeLabels: Record<Outcome, string> = {
 
 export function MarketDetail() {
   const { marketId = '' } = useParams()
+  const { isConnected, userData, signMessage } = useWallet()
   const [maker, setMaker] = useState('')
   const [side, setSide] = useState<OrderSide>('BUY')
   const [outcome, setOutcome] = useState<Outcome>('yes')
@@ -44,6 +47,15 @@ export function MarketDetail() {
   const [size, setSize] = useState('')
   const [errorMessage, setErrorMessage] = useState<string>()
   const [successMessage, setSuccessMessage] = useState<string>()
+
+  // Auto-fill maker address from connected wallet
+  useEffect(() => {
+    if (isConnected && userData?.addresses?.stx?.[0]?.address) {
+      setMaker(userData.addresses.stx[0].address)
+    } else {
+      setMaker('')
+    }
+  }, [isConnected, userData])
 
   const marketQuery = useApiQuery(
     `market-${marketId}`,
@@ -101,6 +113,13 @@ export function MarketDetail() {
     event.preventDefault()
     if (!market) return
 
+    // Check wallet connection
+    if (!isConnected) {
+      setErrorMessage('Please connect your wallet to place orders.')
+      setSuccessMessage(undefined)
+      return
+    }
+
     const numericPrice = Number(price)
     const numericSize = Number(size)
 
@@ -118,6 +137,32 @@ export function MarketDetail() {
 
     try {
       setErrorMessage(undefined)
+
+      // Generate order parameters
+      const salt = generateSalt()
+      const expiration = calculateExpiration(1) // 1 hour from now
+      const takerAmount = numericSize * numericPrice // Calculate taker amount
+
+      // Compute order hash for signing
+      const orderHash = computeOrderHash(
+        maker,
+        maker, // Use maker as taker for limit orders
+        positionIdForOutcome,
+        numericSize,
+        takerAmount,
+        salt,
+        expiration
+      )
+
+      // Convert Uint8Array to hex string
+      const orderHashHex = Array.from(orderHash)
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('')
+
+      // Sign the order hash with wallet (returns signature + publicKey)
+      const signResult = await signMessage(orderHashHex)
+
+      // Submit order with signature and publicKey for verification
       await api.placeOrder({
         maker,
         marketId: market.marketId,
@@ -126,8 +171,12 @@ export function MarketDetail() {
         side,
         price: numericPrice,
         size: numericSize,
-        expiration: Date.now() + 1000 * 60 * 60 // placeholder expiration
+        salt,
+        expiration,
+        signature: signResult.signature,
+        publicKey: signResult.publicKey
       })
+
       setSuccessMessage(`Order submitted for ${outcomeLabels[outcome]} ${side}`)
       setPrice('')
       setSize('')
@@ -281,7 +330,18 @@ export function MarketDetail() {
               <form className="space-y-4" onSubmit={onSubmitOrder}>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Maker address</label>
-                  <Input placeholder="ST..." value={maker} onChange={(event) => setMaker(event.target.value)} required />
+                  <Input
+                    placeholder="Connect wallet to auto-fill"
+                    value={maker}
+                    onChange={(event) => setMaker(event.target.value)}
+                    disabled={isConnected}
+                    required
+                  />
+                  {!isConnected && (
+                    <p className="text-xs text-muted-foreground">
+                      Connect your wallet to place signed orders
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Outcome</label>

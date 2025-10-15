@@ -1,12 +1,22 @@
-import { STACKS_DEVNET } from '@stacks/network';
+import type { StacksNetwork } from '@stacks/network';
+import { STACKS_DEVNET, STACKS_TESTNET, STACKS_MAINNET } from '@stacks/network';
 
 const DEFAULT_API_BASE_URL = 'http://localhost:3000';
 
 export const apiBaseUrl =
   import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') || DEFAULT_API_BASE_URL;
 
-// Network configuration for devnet
-export const stacksNetwork = STACKS_DEVNET;
+// Network configuration - can be changed via environment variable
+const NETWORK_TYPE = import.meta.env.VITE_STACKS_NETWORK || 'devnet';
+
+// StacksNetwork object for transactions package
+export const stacksNetwork: StacksNetwork =
+  NETWORK_TYPE === 'mainnet' ? STACKS_MAINNET :
+  NETWORK_TYPE === 'testnet' ? STACKS_TESTNET :
+  STACKS_DEVNET;
+
+// Network identifier string for Connect API (must be 'mainnet', 'testnet', or 'devnet')
+export const networkIdentifier = NETWORK_TYPE as 'mainnet' | 'testnet' | 'devnet';
 
 // Contract addresses (these would be set after deployment)
 export const CONTRACT_ADDRESSES = {
