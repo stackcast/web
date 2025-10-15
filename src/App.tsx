@@ -3,6 +3,7 @@ import { Layout } from '@/components/Layout'
 import { Markets } from '@/pages/Markets'
 import { MarketDetail } from '@/pages/MarketDetail'
 import { Oracle } from '@/pages/Oracle'
+import { Voting } from '@/pages/Voting'
 import { WalletProvider } from '@/contexts/WalletContext'
 
 export function App() {
@@ -13,6 +14,7 @@ export function App() {
           <Route index element={<Markets />} />
           <Route path="market/:marketId" element={<MarketDetail />} />
           <Route path="oracle" element={<Oracle />} />
+          <Route path="voting" element={<Voting />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
