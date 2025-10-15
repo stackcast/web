@@ -72,7 +72,7 @@ export function useApiQuery<T>(
       controllerRef.current?.abort()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, enabled, runFetch, ...watch])
+  }, [key, enabled, ...watch])
 
   useEffect(() => {
     if (!refreshIntervalMs || !enabled) {

@@ -1,12 +1,12 @@
 import type { FormEvent } from 'react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { useApiQuery } from '@/hooks/use-api'
 import { api } from '@/lib/api-client'
 import type { Market } from '@/types/api'
 
@@ -31,16 +31,24 @@ export function Markets() {
   const [creator, setCreator] = useState('')
   const [question, setQuestion] = useState('')
   const [conditionId, setConditionId] = useState('')
-  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const {
-    data,
-    isLoading,
-    error,
-    refetch,
-    isRefetching
-  } = useApiQuery('markets', (signal) => api.getMarkets(signal), {
-    refreshIntervalMs: 5000
+  const queryClient = useQueryClient()
+
+  const { data, isLoading, error, isRefetching } = useQuery({
+    queryKey: ['markets'],
+    queryFn: () => api.getMarkets(new AbortController().signal),
+    refetchInterval: 5000,
+  })
+
+  const createMarketMutation = useMutation({
+    mutationFn: (params: { question: string; creator: string; conditionId?: string }) =>
+      api.createMarket(params),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['markets'] })
+      setQuestion('')
+      setCreator('')
+      setConditionId('')
+    },
   })
 
   const markets = useMemo(() => data?.markets ?? [], [data?.markets])
@@ -62,19 +70,7 @@ export function Markets() {
   const handleCreateMarket = async (event: FormEvent) => {
     event.preventDefault()
     if (!question || !creator) return
-
-    setIsSubmitting(true)
-    try {
-      await api.createMarket({ question, creator, conditionId: conditionId || undefined })
-      setQuestion('')
-      setCreator('')
-      setConditionId('')
-      await refetch()
-    } catch (err) {
-      console.error('Failed to create market', err)
-    } finally {
-      setIsSubmitting(false)
-    }
+    createMarketMutation.mutate({ question, creator, conditionId: conditionId || undefined })
   }
 
   return (
@@ -122,8 +118,8 @@ export function Markets() {
                   onChange={(event) => setConditionId(event.target.value)}
                 />
               </div>
-              <Button className="w-full" type="submit" disabled={isSubmitting}>
-                {isSubmitting ? 'Creating…' : 'Create market'}
+              <Button className="w-full" type="submit" disabled={createMarketMutation.isPending}>
+                {createMarketMutation.isPending ? 'Creating…' : 'Create market'}
               </Button>
             </form>
           </DialogContent>
