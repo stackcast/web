@@ -40,6 +40,9 @@ export function Layout() {
               <Button variant={isActive('/oracle') ? 'default' : 'ghost'} asChild>
                 <Link to="/oracle">Oracle</Link>
               </Button>
+              <Button variant={isActive('/voting') ? 'default' : 'ghost'} asChild>
+                <Link to="/voting">Voting</Link>
+              </Button>
             </div>
           </div>
           
