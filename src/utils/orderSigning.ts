@@ -1,32 +1,93 @@
-import { hashMessage } from "@stacks/encryption";
 import { openSignatureRequestPopup } from "@stacks/connect";
+import { serializeCVBytes, standardPrincipalCV, uintCV } from "@stacks/transactions";
 
 /**
  * Compute order hash matching backend/contract implementation
+ *
+ * Contract implementation (ctf-exchange.clar:46-78):
+ * (sha256 (concat
+ *   maker + taker + maker-position-id + taker-position-id +
+ *   maker-amount + taker-amount + salt + expiration))
  */
-export function computeOrderHash(
+export async function computeOrderHash(
   maker: string,
   taker: string,
-  positionId: string,
+  makerPositionId: string,
+  takerPositionId: string,
   makerAmount: number,
   takerAmount: number,
   salt: string,
   expiration: number
-): Uint8Array {
-  // Create a deterministic order message
-  // This should match the backend's computeOrderHash function
-  const orderMessage = JSON.stringify({
-    maker,
-    taker,
-    positionId,
-    makerAmount,
-    takerAmount,
-    salt,
-    expiration,
-  });
+): Promise<Uint8Array> {
+  // Validate salt is numeric
+  if (!/^\d+$/.test(salt)) {
+    throw new Error("Salt must be a numeric string");
+  }
 
-  // Hash the message using Stacks' hashMessage function
-  return hashMessage(orderMessage);
+  // Serialize each field to Clarity consensus buffers (as Uint8Array)
+  const makerBuff = serializeCVBytes(standardPrincipalCV(maker));
+  const takerBuff = serializeCVBytes(standardPrincipalCV(taker));
+
+  // Position IDs should be 32-byte hex strings (64 hex chars)
+  const makerPositionIdBuff = hexToBytes(makerPositionId);
+  const takerPositionIdBuff = hexToBytes(takerPositionId);
+
+  if (makerPositionIdBuff.length !== 32) {
+    throw new Error(`Maker position ID must be 32 bytes (64 hex chars), got ${makerPositionIdBuff.length} bytes`);
+  }
+  if (takerPositionIdBuff.length !== 32) {
+    throw new Error(`Taker position ID must be 32 bytes (64 hex chars), got ${takerPositionIdBuff.length} bytes`);
+  }
+
+  const makerAmountBuff = serializeCVBytes(uintCV(makerAmount));
+  const takerAmountBuff = serializeCVBytes(uintCV(takerAmount));
+  const saltBuff = serializeCVBytes(uintCV(BigInt(salt)));
+  const expirationBuff = serializeCVBytes(uintCV(expiration));
+
+  // Concatenate all buffers in the exact order as the contract
+  const concatenated = new Uint8Array(
+    makerBuff.length +
+    takerBuff.length +
+    makerPositionIdBuff.length +
+    takerPositionIdBuff.length +
+    makerAmountBuff.length +
+    takerAmountBuff.length +
+    saltBuff.length +
+    expirationBuff.length
+  );
+
+  let offset = 0;
+  concatenated.set(makerBuff, offset);
+  offset += makerBuff.length;
+  concatenated.set(takerBuff, offset);
+  offset += takerBuff.length;
+  concatenated.set(makerPositionIdBuff, offset);
+  offset += makerPositionIdBuff.length;
+  concatenated.set(takerPositionIdBuff, offset);
+  offset += takerPositionIdBuff.length;
+  concatenated.set(makerAmountBuff, offset);
+  offset += makerAmountBuff.length;
+  concatenated.set(takerAmountBuff, offset);
+  offset += takerAmountBuff.length;
+  concatenated.set(saltBuff, offset);
+  offset += saltBuff.length;
+  concatenated.set(expirationBuff, offset);
+
+  // Hash with SHA-256 using Web Crypto API
+  const hash = await crypto.subtle.digest('SHA-256', concatenated);
+  return new Uint8Array(hash);
+}
+
+/**
+ * Convert hex string to Uint8Array
+ */
+function hexToBytes(hex: string): Uint8Array {
+  const cleanHex = hex.replace(/^0x/, '');
+  const bytes = new Uint8Array(cleanHex.length / 2);
+  for (let i = 0; i < cleanHex.length; i += 2) {
+    bytes[i / 2] = parseInt(cleanHex.substring(i, i + 2), 16);
+  }
+  return bytes;
 }
 
 /**
@@ -34,21 +95,23 @@ export function computeOrderHash(
  * This uses the Stacks Connect library to request a signature from the user's wallet
  * Returns the signature in RSV format (65 bytes = 130 hex chars)
  */
-export function signOrder(
+export async function signOrder(
   maker: string,
   taker: string,
-  positionId: string,
+  makerPositionId: string,
+  takerPositionId: string,
   makerAmount: number,
   takerAmount: number,
   salt: string,
   expiration: number
 ): Promise<string> {
-  return new Promise((resolve, reject) => {
+  return new Promise(async (resolve, reject) => {
     // Compute order hash
-    const orderHash = computeOrderHash(
+    const orderHash = await computeOrderHash(
       maker,
       taker,
-      positionId,
+      makerPositionId,
+      takerPositionId,
       makerAmount,
       takerAmount,
       salt,
@@ -85,7 +148,8 @@ export function signOrder(
  */
 export interface OrderSigningParams {
   maker: string;
-  positionId: string;
+  makerPositionId: string;
+  takerPositionId: string;
   size: number;
   price: number;
   salt?: string;

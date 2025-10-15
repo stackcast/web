@@ -65,7 +65,8 @@ export interface OrderRequest {
   maker: string
   marketId: string
   conditionId?: string
-  positionId: string
+  makerPositionId?: string // Optional - server derives from market if not provided
+  takerPositionId?: string // Optional - server derives from market if not provided
   side: OrderSide
   price: number
   size: number
@@ -82,7 +83,8 @@ export interface OrderResponse {
     maker: string
     marketId: string
     conditionId: string
-    positionId: string
+    makerPositionId: string
+    takerPositionId: string
     side: OrderSide
     price: number
     size: number
@@ -94,6 +96,7 @@ export interface OrderResponse {
     createdAt: number
     updatedAt: number
     signature?: string
+    publicKey?: string
   }
 }
 
@@ -101,7 +104,8 @@ export interface Trade {
   tradeId: string
   marketId: string
   conditionId: string
-  positionId: string
+  makerPositionId: string
+  takerPositionId: string
   maker: string
   taker: string
   price: number
