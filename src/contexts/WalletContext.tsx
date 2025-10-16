@@ -3,15 +3,18 @@ import {
   disconnect,
   getLocalStorage,
   isConnected,
+  openContractCall,
   request,
 } from "@stacks/connect";
 import {
+  AnchorMode,
   fetchCallReadOnlyFunction,
+  PostConditionMode,
   type ClarityValue,
 } from "@stacks/transactions";
 import type { ReactNode } from "react";
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { networkIdentifier, stacksNetwork } from "../lib/config";
+import { stacksNetwork } from "../lib/config";
 
 interface UserData {
   addresses: {
@@ -29,6 +32,12 @@ interface ContractCallResponse {
   txid: string;
 }
 
+interface ContractCallOptions {
+  postConditionMode?: "allow" | "deny";
+  onFinish?: (data: { txId: string }) => void;
+  onCancel?: () => void;
+}
+
 interface WalletContextType {
   isConnected: boolean;
   userData: UserData | null;
@@ -40,7 +49,8 @@ interface WalletContextType {
     contractAddress: string,
     contractName: string,
     functionName: string,
-    functionArgs?: ClarityValue[]
+    functionArgs?: ClarityValue[],
+    options?: ContractCallOptions
   ) => Promise<ContractCallResponse>;
   readContract: (
     contractAddress: string,
@@ -153,7 +163,8 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     contractAddress: string,
     contractName: string,
     functionName: string,
-    functionArgs: ClarityValue[] = []
+    functionArgs: ClarityValue[] = [],
+    options: ContractCallOptions = {}
   ) => {
     if (!isConnectedState) {
       throw new Error("Wallet not connected");
@@ -162,26 +173,44 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     setIsLoading(true);
     setError(null);
 
-    try {
-      // Use request for contract calls
-      const response = (await request("stx_callContract", {
-        contract: `${contractAddress}.${contractName}`,
-        functionName,
-        functionArgs,
-        network: networkIdentifier,
-      })) as ContractCallResponse;
-
-      console.log("Contract call initiated:", response);
-      return response;
-    } catch (err) {
-      console.error("Contract call error:", err);
-      const errorMessage =
-        err instanceof Error ? err.message : "Contract call failed";
-      setError(errorMessage);
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
+    return new Promise<ContractCallResponse>((resolve, reject) => {
+      try {
+        openContractCall({
+          network: stacksNetwork,
+          anchorMode: AnchorMode.Any,
+          contractAddress,
+          contractName,
+          functionName,
+          functionArgs,
+          postConditionMode: PostConditionMode.Allow,
+          postConditions: [],
+          onFinish: (data) => {
+            console.log("Contract call successful:", data);
+            setIsLoading(false);
+            const response = { txid: data.txId };
+            if (options.onFinish) {
+              options.onFinish(data);
+            }
+            resolve(response);
+          },
+          onCancel: () => {
+            console.log("Contract call cancelled");
+            setIsLoading(false);
+            if (options.onCancel) {
+              options.onCancel();
+            }
+            reject(new Error("User cancelled transaction"));
+          },
+        });
+      } catch (err) {
+        console.error("Contract call error:", err);
+        const errorMessage =
+          err instanceof Error ? err.message : "Contract call failed";
+        setError(errorMessage);
+        setIsLoading(false);
+        reject(err);
+      }
+    });
   };
 
   const readContract = async (
