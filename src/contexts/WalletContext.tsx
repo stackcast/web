@@ -1,14 +1,17 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import type { ReactNode } from 'react';
 import {
   connect,
   disconnect,
-  isConnected,
   getLocalStorage,
-  request
-} from '@stacks/connect';
-import { fetchCallReadOnlyFunction, type ClarityValue } from '@stacks/transactions';
-import { stacksNetwork } from '../lib/config';
+  isConnected,
+  request,
+} from "@stacks/connect";
+import {
+  fetchCallReadOnlyFunction,
+  type ClarityValue,
+} from "@stacks/transactions";
+import type { ReactNode } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
+import { networkIdentifier, stacksNetwork } from "../lib/config";
 
 interface UserData {
   addresses: {
@@ -33,8 +36,18 @@ interface WalletContextType {
   disconnectWallet: () => void;
   getAccount: () => Promise<Awaited<ReturnType<typeof request>>>;
   signMessage: (message: string) => Promise<SignMessageResponse>;
-  callContract: (contractAddress: string, contractName: string, functionName: string, functionArgs?: ClarityValue[]) => Promise<ContractCallResponse>;
-  readContract: (contractAddress: string, contractName: string, functionName: string, functionArgs?: ClarityValue[]) => Promise<ClarityValue>;
+  callContract: (
+    contractAddress: string,
+    contractName: string,
+    functionName: string,
+    functionArgs?: ClarityValue[]
+  ) => Promise<ContractCallResponse>;
+  readContract: (
+    contractAddress: string,
+    contractName: string,
+    functionName: string,
+    functionArgs?: ClarityValue[]
+  ) => Promise<ClarityValue>;
   isLoading: boolean;
   error: string | null;
 }
@@ -74,7 +87,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
 
     try {
       if (isConnected()) {
-        console.log('Already connected');
+        console.log("Already connected");
         setIsLoading(false);
         return;
       }
@@ -83,12 +96,12 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
       // It automatically stores the address in local storage
       const response = await connect();
 
-      console.log('Connected:', response);
+      console.log("Connected:", response);
       setIsConnectedState(true);
       setUserData(response as unknown as UserData);
     } catch (err) {
-      console.error('Connection error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to connect wallet');
+      console.error("Connection error:", err);
+      setError(err instanceof Error ? err.message : "Failed to connect wallet");
     } finally {
       setIsLoading(false);
     }
@@ -99,39 +112,39 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     setIsConnectedState(false);
     setUserData(null);
     setError(null);
-    console.log('Wallet disconnected');
+    console.log("Wallet disconnected");
   };
 
   const getAccount = async () => {
     if (!isConnectedState) {
-      throw new Error('Wallet not connected');
+      throw new Error("Wallet not connected");
     }
 
     try {
-      const accounts = await request('stx_getAccounts');
+      const accounts = await request("stx_getAccounts");
       return accounts;
     } catch (err) {
-      console.error('Error getting account:', err);
+      console.error("Error getting account:", err);
       throw err;
     }
   };
 
   const signMessage = async (message: string) => {
     if (!isConnectedState) {
-      throw new Error('Wallet not connected');
+      throw new Error("Wallet not connected");
     }
 
     try {
       // Use request for message signing
       // Returns both signature and publicKey for verification
-      const response = await request('stx_signMessage', {
-        message
-      }) as SignMessageResponse;
+      const response = (await request("stx_signMessage", {
+        message,
+      })) as SignMessageResponse;
 
-      console.log('Message signed:', response);
+      console.log("Message signed:", response);
       return response; // Return both signature and publicKey
     } catch (err) {
-      console.error('Error signing message:', err);
+      console.error("Error signing message:", err);
       throw err;
     }
   };
@@ -143,25 +156,27 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     functionArgs: ClarityValue[] = []
   ) => {
     if (!isConnectedState) {
-      throw new Error('Wallet not connected');
+      throw new Error("Wallet not connected");
     }
 
     setIsLoading(true);
     setError(null);
 
     try {
-      // Use request for contract calls according to @stacks/connect README
-      const response = await request('stx_callContract', {
+      // Use request for contract calls
+      const response = (await request("stx_callContract", {
         contract: `${contractAddress}.${contractName}`,
         functionName,
-        functionArgs
-      }) as ContractCallResponse;
+        functionArgs,
+        network: networkIdentifier,
+      })) as ContractCallResponse;
 
-      console.log('Contract call initiated:', response);
+      console.log("Contract call initiated:", response);
       return response;
     } catch (err) {
-      console.error('Contract call error:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Contract call failed';
+      console.error("Contract call error:", err);
+      const errorMessage =
+        err instanceof Error ? err.message : "Contract call failed";
       setError(errorMessage);
       throw err;
     } finally {
@@ -179,7 +194,6 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     setError(null);
 
     try {
-      // Use fetchCallReadOnlyFunction as recommended by Stacks docs
       const result = await fetchCallReadOnlyFunction({
         contractAddress,
         contractName,
@@ -189,11 +203,12 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
         senderAddress: contractAddress, // Use contract address as sender for read-only calls
       });
 
-      console.log('Read contract result:', result);
+      console.log("Read contract result:", result);
       return result;
     } catch (err) {
-      console.error('Read contract error:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Read contract failed';
+      console.error("Read contract error:", err);
+      const errorMessage =
+        err instanceof Error ? err.message : "Read contract failed";
       setError(errorMessage);
       throw err;
     } finally {
@@ -215,16 +230,14 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
   };
 
   return (
-    <WalletContext.Provider value={value}>
-      {children}
-    </WalletContext.Provider>
+    <WalletContext.Provider value={value}>{children}</WalletContext.Provider>
   );
 };
 
 export const useWallet = (): WalletContextType => {
   const context = useContext(WalletContext);
   if (context === undefined) {
-    throw new Error('useWallet must be used within a WalletProvider');
+    throw new Error("useWallet must be used within a WalletProvider");
   }
   return context;
 };
