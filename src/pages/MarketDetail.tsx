@@ -821,7 +821,7 @@ export function MarketDetail() {
                     </label>
                     <Input
                       type="number"
-                      step="0.1"
+                      step="any"
                       min="0.01"
                       value={price}
                       onChange={(event) => setPrice(event.target.value)}
