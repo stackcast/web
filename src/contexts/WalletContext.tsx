@@ -10,8 +10,15 @@ import {
   type ClarityValue,
 } from "@stacks/transactions";
 import type { ReactNode } from "react";
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useState } from "react";
 import { networkIdentifier, stacksNetwork } from "../lib/config";
+
+// Declare Leather provider type for window
+declare global {
+  interface Window {
+    LeatherProvider?: unknown;
+  }
+}
 
 interface UserData {
   addresses: {
@@ -66,27 +73,19 @@ interface WalletProviderProps {
 }
 
 export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
-  const [isConnectedState, setIsConnectedState] = useState(false);
-  const [userData, setUserData] = useState<UserData | null>(null);
+  // Initialize state directly from localStorage (synchronous) to avoid flash
+  const [isConnectedState, setIsConnectedState] = useState(() => isConnected());
+  const [userData, setUserData] = useState<UserData | null>(() => {
+    if (isConnected()) {
+      const storedData = getLocalStorage();
+      if (storedData?.addresses) {
+        return storedData as UserData;
+      }
+    }
+    return null;
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Initialize wallet state on mount
-  useEffect(() => {
-    const initializeWallet = () => {
-      const connected = isConnected();
-      setIsConnectedState(connected);
-
-      if (connected) {
-        const storedData = getLocalStorage();
-        if (storedData?.addresses) {
-          setUserData(storedData as UserData);
-        }
-      }
-    };
-
-    initializeWallet();
-  }, []);
 
   const connectWallet = async () => {
     setIsLoading(true);
