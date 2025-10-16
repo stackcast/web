@@ -27,13 +27,14 @@ export const networkIdentifier = NETWORK_TYPE as
   | "testnet"
   | "devnet";
 
+// Contract deployer address from environment
+const CONTRACT_DEPLOYER = import.meta.env.VITE_CONTRACT_ADDRESS || "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM";
+
 // Contract addresses (these would be set after deployment)
 export const CONTRACT_ADDRESSES = {
-  MESSAGE: "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.message", // Test message board contract
-  ORACLE_ADAPTER: "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.oracle-adapter", // deployer address from devnet
-  CONDITIONAL_TOKENS:
-    "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.conditional-tokens",
-  CTF_EXCHANGE: "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.ctf-exchange",
-  OPTIMISTIC_ORACLE:
-    "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.optimistic-oracle",
+  MESSAGE: `${CONTRACT_DEPLOYER}.message`,
+  ORACLE_ADAPTER: `${CONTRACT_DEPLOYER}.oracle-adapter`,
+  CONDITIONAL_TOKENS: `${CONTRACT_DEPLOYER}.conditional-tokens`,
+  CTF_EXCHANGE: `${CONTRACT_DEPLOYER}.ctf-exchange`,
+  OPTIMISTIC_ORACLE: `${CONTRACT_DEPLOYER}.optimistic-oracle`,
 } as const;
