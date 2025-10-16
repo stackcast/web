@@ -43,22 +43,18 @@ import {
   waitForTransactionConfirmation,
 } from "@/utils/stacksHelpers";
 import { hexToBytes } from "@stacks/common";
-import {
-  bufferCV,
-  principalCV,
-  uintCV,
-} from "@stacks/transactions";
+import { bufferCV, principalCV, uintCV } from "@stacks/transactions";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 type Outcome = "yes" | "no";
 
-const formatCents = (value?: number) =>
-  typeof value === "number" ? `${value.toFixed(2)}¢` : "—";
-
 const formatSats = (value?: number) =>
-  typeof value === "number" ? `${value.toFixed(4)} sBTC` : "—";
+  typeof value === "number" ? `${(value / 1_000_000).toFixed(4)} sBTC` : "—";
+
+const formatPrice = (value?: number) =>
+  typeof value === "number" ? `${(value / 1_000_000).toFixed(2)} sBTC` : "—";
 
 const formatTimestamp = (timestamp?: number) =>
   timestamp ? new Date(timestamp).toLocaleString() : "—";
@@ -83,8 +79,8 @@ export function MarketDetail() {
   const [side, setSide] = useState<OrderSide>("BUY");
   const [outcome, setOutcome] = useState<Outcome>("yes");
   const [orderType, setOrderType] = useState<OrderType>("LIMIT");
-  const [price, setPrice] = useState("");
-  const [size, setSize] = useState("");
+  const [price, setPrice] = useState("0.5");
+  const [size, setSize] = useState("1");
   const [maxSlippage, setMaxSlippage] = useState("5");
   const [executionPreview, setExecutionPreview] =
     useState<ExecutionPlan | null>(null);
@@ -148,12 +144,6 @@ export function MarketDetail() {
       CONTRACT_ADDRESSES.CONDITIONAL_TOKENS.split(".");
     const amountMicroSats = Math.floor(amount * 1_000_000); // Convert to micro-satoshis
 
-    console.log('Split position details:', {
-      contractAddress,
-      contractName,
-      amount: amountMicroSats,
-      conditionId: market.conditionId
-    });
 
     try {
       const response = await callContract(
@@ -229,8 +219,12 @@ export function MarketDetail() {
         return;
       }
 
-      const numericSize = Number(size);
-      const numericPrice = orderType === "LIMIT" ? Number(price) : undefined;
+      const numericSize = Math.floor(Number(size)); // Ensure integer tokens
+      // Convert sBTC price to integer micro-sats (multiply by 1,000,000)
+      const numericPrice =
+        orderType === "LIMIT"
+          ? Math.floor(Number(price) * 1_000_000)
+          : undefined;
 
       if (orderType === "LIMIT" && (!price || Number.isNaN(numericPrice))) {
         setExecutionPreview(null);
@@ -276,8 +270,10 @@ export function MarketDetail() {
       return;
     }
 
-    const numericSize = Number(size);
-    const numericPrice = orderType === "LIMIT" ? Number(price) : undefined;
+    const numericSize = Math.floor(Number(size)); // Ensure integer tokens
+    // Convert sBTC price to integer micro-sats (multiply by 1,000,000)
+    const numericPrice =
+      orderType === "LIMIT" ? Math.floor(Number(price) * 1_000_000) : undefined;
 
     if (!maker || Number.isNaN(numericSize)) {
       setErrorMessage("Please provide maker address and size.");
@@ -308,11 +304,11 @@ export function MarketDetail() {
         noPositionId: market.noPositionId,
       });
 
+
       if (balanceCheck.needsSplit) {
         const shortfall = (
-          Number(balanceCheck.requiredBalance - balanceCheck.currentBalance) /
-          1_000_000
-        ).toFixed(2);
+          Number(balanceCheck.requiredBalance) - Number(balanceCheck.currentBalance)
+        ) / 1_000_000;
         const action =
           side === "BUY"
             ? `buy ${outcome.toUpperCase()}`
@@ -320,7 +316,7 @@ export function MarketDetail() {
 
         const shouldSplit = window.confirm(
           `💳 Deposit Required\n\n` +
-            `To ${action}, you need to deposit ${shortfall} sBTC.\n\n` +
+            `To ${action}, you need to deposit ${shortfall.toFixed(2)} sBTC.\n\n` +
             `This will be converted to outcome tokens (YES+NO pairs).\n` +
             `You can merge them back to sBTC anytime.\n\n` +
             `Proceed with deposit?`
@@ -332,7 +328,7 @@ export function MarketDetail() {
           return;
         }
 
-        const splitAmount = Number(shortfall);
+        const splitAmount = shortfall;
         const splitResult = await splitPosition(splitAmount);
 
         if (!splitResult.success) {
@@ -377,34 +373,44 @@ export function MarketDetail() {
       const salt = generateSalt();
       const expiration = calculateExpiration(1); // 1 hour from now
 
-      // Determine which position ID for signing
-      let signPositionId: string;
+      // Determine position IDs based on side and outcome (MUST match backend logic)
+      // BUY YES: maker gives NO tokens (makerPositionId), gets YES tokens (takerPositionId)
+      // BUY NO: maker gives YES tokens (makerPositionId), gets NO tokens (takerPositionId)
+      // SELL YES: maker gives YES tokens (makerPositionId), gets NO tokens (takerPositionId)
+      // SELL NO: maker gives NO tokens (makerPositionId), gets YES tokens (takerPositionId)
+      let makerPositionId: string;
+      let takerPositionId: string;
+
       if (side === "BUY") {
-        signPositionId =
+        // When buying, maker gives the opposite outcome token
+        makerPositionId =
           outcome === "yes" ? market.noPositionId : market.yesPositionId;
-      } else {
-        signPositionId =
+        takerPositionId =
           outcome === "yes" ? market.yesPositionId : market.noPositionId;
+      } else {
+        // When selling, maker gives the outcome token they're selling
+        makerPositionId =
+          outcome === "yes" ? market.yesPositionId : market.noPositionId;
+        takerPositionId =
+          outcome === "yes" ? market.noPositionId : market.yesPositionId;
       }
 
-      // For signing, we use a single representative hash
-      // (For market orders with multiple levels, backend will verify each sub-order)
-      const oppositePositionId =
-        side === "BUY"
-          ? outcome === "yes"
-            ? market.noPositionId
-            : market.yesPositionId
-          : outcome === "yes"
-          ? market.yesPositionId
-          : market.noPositionId;
+      // Calculate amounts (in micro-sats for proper integer handling)
+      const makerAmount = numericSize; // Number of tokens maker gives
+      const takerAmount = Math.floor(
+        orderType === "LIMIT"
+          ? numericSize * numericPrice!
+          : numericSize * 500_000 // Use 0.5 sBTC (500,000 micro-sats) as placeholder for market orders
+      );
+
 
       const signHash = await computeOrderHash(
         maker,
-        maker,
-        signPositionId,
-        oppositePositionId,
-        numericSize,
-        orderType === "LIMIT" ? numericSize * numericPrice! : numericSize * 50, // Use 50¢ as placeholder for market orders
+        maker, // taker = maker for limit orders
+        makerPositionId,
+        takerPositionId,
+        makerAmount,
+        takerAmount,
         salt,
         expiration
       );
@@ -415,8 +421,7 @@ export function MarketDetail() {
 
       const signResult = await signMessage(orderHashHex);
 
-      // Submit smart order using mutation
-      const response = await placeOrderMutation.mutateAsync({
+      const orderPayload = {
         maker,
         marketId: market.marketId,
         outcome,
@@ -429,20 +434,25 @@ export function MarketDetail() {
         expiration,
         signature: signResult.signature,
         publicKey: signResult.publicKey,
-      });
+      };
+
+      // Submit smart order using mutation
+      const response = await placeOrderMutation.mutateAsync(orderPayload);
 
       if (response.success) {
         if (orderType === "MARKET" && response.orders) {
           setSuccessMessage(
-            `✅ Market order executed: ${
-              response.orders.length
-            } fills @ avg ${response.executionPlan?.averagePrice.toFixed(
-              2
-            )}¢ (${response.executionPlan?.slippage.toFixed(2)}% slippage)`
+            `✅ Market order executed: ${response.orders.length} fills @ avg ${(
+              (response.executionPlan?.averagePrice ?? 0) / 1_000_000
+            ).toFixed(2)} sBTC (${(
+              response.executionPlan?.slippage ?? 0
+            ).toFixed(2)}% slippage)`
           );
         } else if (response.order) {
           setSuccessMessage(
-            `✅ Limit order placed: ${side} ${numericSize} ${outcomeLabels[outcome]} @ ${response.order.price}¢`
+            `✅ Limit order placed: ${side} ${numericSize} ${
+              outcomeLabels[outcome]
+            } @ ${(response.order.price / 1_000_000).toFixed(2)} sBTC`
           );
         }
 
@@ -604,7 +614,7 @@ export function MarketDetail() {
                 YES
               </div>
               <div className="text-2xl font-semibold">
-                {formatCents(market.yesPrice)}
+                {formatPrice(market.yesPrice)}
               </div>
             </div>
             <div>
@@ -612,7 +622,7 @@ export function MarketDetail() {
                 NO
               </div>
               <div className="text-2xl font-semibold">
-                {formatCents(market.noPrice)}
+                {formatPrice(market.noPrice)}
               </div>
             </div>
             <div>
@@ -684,7 +694,7 @@ export function MarketDetail() {
                         <TableCell className="font-medium">
                           {trade.side}
                         </TableCell>
-                        <TableCell>{formatCents(trade.price)}</TableCell>
+                        <TableCell>{formatPrice(trade.price)}</TableCell>
                         <TableCell>{trade.size}</TableCell>
                         <TableCell>
                           {formatTimestamp(trade.timestamp)}
@@ -784,16 +794,20 @@ export function MarketDetail() {
                 </div>
                 {orderType === "LIMIT" && (
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Price (¢)</label>
+                    <label className="text-sm font-medium">
+                      Price (sBTC per token)
+                    </label>
                     <Input
                       type="number"
-                      step="0.01"
-                      min="0"
-                      max="100"
+                      step="0.1"
+                      min="0.01"
                       value={price}
                       onChange={(event) => setPrice(event.target.value)}
                       required
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Price in sBTC for each outcome token
+                    </p>
                   </div>
                 )}
                 {orderType === "MARKET" && (
@@ -818,12 +832,15 @@ export function MarketDetail() {
                   <label className="text-sm font-medium">Size (tokens)</label>
                   <Input
                     type="number"
-                    step="0.01"
-                    min="0"
+                    step="1"
+                    min="1"
                     value={size}
                     onChange={(event) => setSize(event.target.value)}
                     required
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Number of outcome tokens to trade
+                  </p>
                 </div>
 
                 {executionPreview && executionPreview.feasible && (
@@ -831,11 +848,11 @@ export function MarketDetail() {
                     <div className="font-medium">Execution Preview</div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Avg Price:</span>
-                      <span>{formatCents(executionPreview.averagePrice)}</span>
+                      <span>{formatPrice(executionPreview.averagePrice)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Total Cost:</span>
-                      <span>{formatCents(executionPreview.totalCost)}</span>
+                      <span>{formatSats(executionPreview.totalCost)}</span>
                     </div>
                     {orderType === "MARKET" && (
                       <>
@@ -862,17 +879,25 @@ export function MarketDetail() {
                   </div>
                 )}
 
-                {executionPreview && !executionPreview.feasible && orderType === "MARKET" && (
-                  <div className="rounded-md bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
-                    {executionPreview.reason || "Cannot execute market order"}
-                  </div>
-                )}
+                {executionPreview &&
+                  !executionPreview.feasible &&
+                  orderType === "MARKET" && (
+                    <div className="rounded-md bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
+                      {executionPreview.reason || "Cannot execute market order"}
+                    </div>
+                  )}
 
-                {executionPreview && !executionPreview.feasible && orderType === "LIMIT" && (
-                  <div className="rounded-md bg-blue-500/10 border border-blue-500/20 p-3 text-sm">
-                    <div className="text-blue-400">💡 No {side === "BUY" ? "sellers" : "buyers"}? Your LIMIT order will provide liquidity until someone matches.</div>
-                  </div>
-                )}
+                {executionPreview &&
+                  !executionPreview.feasible &&
+                  orderType === "LIMIT" && (
+                    <div className="rounded-md bg-blue-500/10 border border-blue-500/20 p-3 text-sm">
+                      <div className="text-blue-400">
+                        💡 No {side === "BUY" ? "sellers" : "buyers"}? Your
+                        LIMIT order will provide liquidity until someone
+                        matches.
+                      </div>
+                    </div>
+                  )}
 
                 {successMessage && (
                   <p className="text-sm text-green-500">{successMessage}</p>
@@ -886,7 +911,9 @@ export function MarketDetail() {
                   disabled={
                     isProcessing ||
                     placeOrderMutation.isPending ||
-                    (orderType === "MARKET" && executionPreview !== null && !executionPreview.feasible)
+                    (orderType === "MARKET" &&
+                      executionPreview !== null &&
+                      !executionPreview.feasible)
                   }
                 >
                   {isProcessing
@@ -933,7 +960,7 @@ export function MarketDetail() {
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Last price</span>
                 <span className="font-semibold">
-                  {formatCents(stats?.lastPrice)}
+                  {formatPrice(stats?.lastPrice)}
                 </span>
               </div>
             </CardContent>
@@ -971,7 +998,7 @@ function OrderbookTable({ bids, asks, emptyLabel }: OrderbookTableProps) {
             {asks?.map((level) => (
               <TableRow key={`ask-${level.price}-${level.size}`}>
                 <TableCell className="text-red-500">
-                  {formatCents(level.price)}
+                  {formatPrice(level.price)}
                 </TableCell>
                 <TableCell>{level.size}</TableCell>
                 <TableCell>{level.total}</TableCell>
@@ -996,7 +1023,7 @@ function OrderbookTable({ bids, asks, emptyLabel }: OrderbookTableProps) {
             {bids?.map((level) => (
               <TableRow key={`bid-${level.price}-${level.size}`}>
                 <TableCell className="text-green-500">
-                  {formatCents(level.price)}
+                  {formatPrice(level.price)}
                 </TableCell>
                 <TableCell>{level.size}</TableCell>
                 <TableCell>{level.total}</TableCell>

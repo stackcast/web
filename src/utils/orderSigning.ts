@@ -29,6 +29,7 @@ export async function computeOrderHash(
   }
 
   // Serialize each field to Clarity consensus buffers (as Uint8Array)
+  // Using serializeCVBytes which returns Uint8Array directly
   const makerBuff = serializeCVBytes(standardPrincipalCV(maker));
   const takerBuff = serializeCVBytes(standardPrincipalCV(taker));
 
@@ -47,9 +48,11 @@ export async function computeOrderHash(
     );
   }
 
+  // uintCV() accepts number/string/bigint and handles conversion internally
+  // Using serializeCVBytes which returns Uint8Array directly
   const makerAmountBuff = serializeCVBytes(uintCV(makerAmount));
   const takerAmountBuff = serializeCVBytes(uintCV(takerAmount));
-  const saltBuff = serializeCVBytes(uintCV(BigInt(salt)));
+  const saltBuff = serializeCVBytes(uintCV(salt));
   const expirationBuff = serializeCVBytes(uintCV(expiration));
 
   // Concatenate all buffers in the exact order as the contract
