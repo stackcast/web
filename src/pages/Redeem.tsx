@@ -5,10 +5,9 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useWallet } from '@/contexts/WalletContext'
-import { CONTRACT_ADDRESSES, stacksNetwork } from '@/lib/config'
-import { bufferCV, cvToValue, uintCV, AnchorMode, PostConditionMode, principalCV } from '@stacks/transactions'
+import { CONTRACT_ADDRESSES } from '@/lib/config'
+import { bufferCV, cvToValue, uintCV, principalCV } from '@stacks/transactions'
 import { hexToBytes } from '@stacks/common'
-import { openContractCall } from '@stacks/connect'
 import { apiRequest } from '@/api/client'
 import type { Market } from '@/types/api'
 
@@ -25,7 +24,7 @@ interface RedeemablePosition {
 }
 
 export function Redeem() {
-  const { isConnected, userData, readContract } = useWallet()
+  const { isConnected, userData, readContract, callContract } = useWallet()
   const address = userData?.addresses?.stx?.[0]?.address
   const [redeemablePositions, setRedeemablePositions] = useState<RedeemablePosition[]>([])
   const [loading, setLoading] = useState(true)
@@ -164,35 +163,23 @@ export function Redeem() {
     try {
       const [contractAddress, contractName] = CONTRACT_ADDRESSES.CONDITIONAL_TOKENS.split('.')
 
-      await new Promise<void>((resolve, reject) => {
-        openContractCall({
-          network: stacksNetwork,
-          anchorMode: AnchorMode.Any,
-          contractAddress,
-          contractName,
-          functionName: 'redeem-positions',
-          functionArgs: [
-            bufferCV(hexToBytes(position.conditionId.slice(2))),
-            uintCV(position.outcomeIndex)
-          ],
-          postConditionMode: PostConditionMode.Allow,
-          onFinish: (data) => {
-            console.log('Redemption successful:', data)
-            alert(`✅ Redemption successful!\n\nYou received ${position.payoutAmount} sBTC\nTransaction ID: ${data.txId}`)
+      const response = await callContract(
+        contractAddress,
+        contractName,
+        'redeem-positions',
+        [
+          bufferCV(hexToBytes(position.conditionId.slice(2))),
+          uintCV(position.outcomeIndex)
+        ]
+      )
 
-            // Reload positions after a delay
-            setTimeout(() => {
-              loadRedeemablePositions()
-            }, 2000)
+      console.log('Redemption successful:', response)
+      alert(`✅ Redemption successful!\n\nYou received ${position.payoutAmount} sBTC\nTransaction ID: ${response.txid}`)
 
-            resolve()
-          },
-          onCancel: () => {
-            console.log('Redemption cancelled')
-            reject(new Error('User cancelled redemption'))
-          },
-        })
-      })
+      // Reload positions after a delay
+      setTimeout(() => {
+        loadRedeemablePositions()
+      }, 2000)
     } catch (error) {
       console.error('Redemption error:', error)
       alert('Redemption failed: ' + (error instanceof Error ? error.message : 'Unknown error'))

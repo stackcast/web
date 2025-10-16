@@ -18,13 +18,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useWallet } from "@/contexts/WalletContext";
-import { CONTRACT_ADDRESSES, stacksNetwork, apiBaseUrl } from "@/lib/config";
+import { CONTRACT_ADDRESSES, apiBaseUrl } from "@/lib/config";
 import { hexToBytes } from "@stacks/common";
-import { openContractCall } from "@stacks/connect";
 import {
-  AnchorMode,
   bufferCV,
-  PostConditionMode,
   uintCV,
 } from "@stacks/transactions";
 import { useEffect, useState } from "react";
@@ -47,7 +44,7 @@ interface DisputedQuestion {
 }
 
 export function Voting() {
-  const { userData } = useWallet();
+  const { userData, callContract } = useWallet();
   const address = userData?.addresses?.stx?.[0]?.address;
   const [selectedQuestion, setSelectedQuestion] =
     useState<DisputedQuestion | null>(null);
@@ -144,26 +141,21 @@ export function Voting() {
     if (!selectedQuestion || !address) return;
 
     try {
-      openContractCall({
-        network: stacksNetwork,
-        anchorMode: AnchorMode.Any,
-        contractAddress: CONTRACT_ADDRESSES.OPTIMISTIC_ORACLE.split(".")[0],
-        contractName: CONTRACT_ADDRESSES.OPTIMISTIC_ORACLE.split(".")[1],
-        functionName: "vote",
-        functionArgs: [
+      const [contractAddress, contractName] = CONTRACT_ADDRESSES.OPTIMISTIC_ORACLE.split(".");
+
+      const response = await callContract(
+        contractAddress,
+        contractName,
+        "vote",
+        [
           bufferCV(hexToBytes(selectedQuestion.questionId.slice(2))),
           uintCV(voteChoice === "YES" ? 1 : 0),
           uintCV(parseInt(stakeAmount)),
-        ],
-        postConditionMode: PostConditionMode.Allow,
-        onFinish: (data) => {
-          console.log("Vote submitted:", data);
-          alert("Vote submitted! Transaction ID: " + data.txId);
-        },
-        onCancel: () => {
-          console.log("Vote cancelled");
-        },
-      });
+        ]
+      );
+
+      console.log("Vote submitted:", response);
+      alert("Vote submitted! Transaction ID: " + response.txid);
     } catch (error) {
       console.error("Error voting:", error);
       alert("Error submitting vote: " + (error as Error).message);
@@ -174,22 +166,17 @@ export function Voting() {
     if (!address) return;
 
     try {
-      openContractCall({
-        network: stacksNetwork,
-        anchorMode: AnchorMode.Any,
-        contractAddress: CONTRACT_ADDRESSES.OPTIMISTIC_ORACLE.split(".")[0],
-        contractName: CONTRACT_ADDRESSES.OPTIMISTIC_ORACLE.split(".")[1],
-        functionName: "claim-vote-rewards",
-        functionArgs: [bufferCV(hexToBytes(question.questionId.slice(2)))],
-        postConditionMode: PostConditionMode.Allow,
-        onFinish: (data) => {
-          console.log("Rewards claimed:", data);
-          alert("Rewards claimed! Transaction ID: " + data.txId);
-        },
-        onCancel: () => {
-          console.log("Claim cancelled");
-        },
-      });
+      const [contractAddress, contractName] = CONTRACT_ADDRESSES.OPTIMISTIC_ORACLE.split(".");
+
+      const response = await callContract(
+        contractAddress,
+        contractName,
+        "claim-vote-rewards",
+        [bufferCV(hexToBytes(question.questionId.slice(2)))]
+      );
+
+      console.log("Rewards claimed:", response);
+      alert("Rewards claimed! Transaction ID: " + response.txid);
     } catch (error) {
       console.error("Error claiming rewards:", error);
       alert("Error claiming rewards: " + (error as Error).message);

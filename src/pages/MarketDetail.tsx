@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useWallet } from "@/contexts/WalletContext";
-import { CONTRACT_ADDRESSES, stacksNetwork } from "@/lib/config";
+import { CONTRACT_ADDRESSES } from "@/lib/config";
 import type {
   CombinedOrderbook,
   ExecutionPlan,
@@ -43,10 +43,7 @@ import {
   waitForTransactionConfirmation,
 } from "@/utils/stacksHelpers";
 import { hexToBytes } from "@stacks/common";
-import { openContractCall } from "@stacks/connect";
 import {
-  AnchorMode,
-  PostConditionMode,
   bufferCV,
   principalCV,
   uintCV,
@@ -81,7 +78,7 @@ const outcomeLabels: Record<Outcome, string> = {
 
 export function MarketDetail() {
   const { marketId = "" } = useParams();
-  const { isConnected, userData, signMessage } = useWallet();
+  const { isConnected, userData, signMessage, callContract } = useWallet();
   const [maker, setMaker] = useState("");
   const [side, setSide] = useState<OrderSide>("BUY");
   const [outcome, setOutcome] = useState<Outcome>("yes");
@@ -155,36 +152,31 @@ export function MarketDetail() {
       contractAddress,
       contractName,
       amount: amountMicroSats,
-      conditionId: market.conditionId,
-      network: stacksNetwork
+      conditionId: market.conditionId
     });
 
-    return new Promise((resolve) => {
-      openContractCall({
-        network: stacksNetwork,
-        anchorMode: AnchorMode.Any,
+    try {
+      const response = await callContract(
         contractAddress,
         contractName,
-        functionName: "split-position",
-        functionArgs: [
+        "split-position",
+        [
           uintCV(amountMicroSats),
           bufferCV(hexToBytes(market.conditionId.replace("0x", ""))),
-        ],
-        postConditionMode: PostConditionMode.Allow,
-        onFinish: (data) => {
-          setSuccessMessage(
-            `✅ Deposited ${amount} sBTC into market (txid: ${data.txId.slice(
-              0,
-              8
-            )}...)`
-          );
-          resolve({ success: true, txId: data.txId });
-        },
-        onCancel: () => {
-          resolve({ success: false });
-        },
-      });
-    });
+        ]
+      );
+
+      setSuccessMessage(
+        `✅ Deposited ${amount} sBTC into market (txid: ${response.txid.slice(
+          0,
+          8
+        )}...)`
+      );
+      return { success: true, txId: response.txid };
+    } catch (error) {
+      console.error("Split position error:", error);
+      return { success: false };
+    }
   };
 
   // Merge positions: convert YES+NO pairs back into sBTC
@@ -197,33 +189,29 @@ export function MarketDetail() {
       CONTRACT_ADDRESSES.CONDITIONAL_TOKENS.split(".");
     const amountMicroSats = Math.floor(amount * 1_000_000); // Convert to micro-satoshis
 
-    return new Promise((resolve) => {
-      openContractCall({
-        network: stacksNetwork,
-        anchorMode: AnchorMode.Any,
+    try {
+      const response = await callContract(
         contractAddress,
         contractName,
-        functionName: "merge-positions",
-        functionArgs: [
+        "merge-positions",
+        [
           uintCV(amountMicroSats),
           bufferCV(hexToBytes(market.conditionId.replace("0x", ""))),
           principalCV(maker), // recipient address
-        ],
-        postConditionMode: PostConditionMode.Allow,
-        onFinish: (data) => {
-          setSuccessMessage(
-            `✅ Merged ${amount} YES+NO pairs → ${amount} sBTC returned (txid: ${data.txId.slice(
-              0,
-              8
-            )}...)`
-          );
-          resolve({ success: true, txId: data.txId });
-        },
-        onCancel: () => {
-          resolve({ success: false });
-        },
-      });
-    });
+        ]
+      );
+
+      setSuccessMessage(
+        `✅ Merged ${amount} YES+NO pairs → ${amount} sBTC returned (txid: ${response.txid.slice(
+          0,
+          8
+        )}...)`
+      );
+      return { success: true, txId: response.txid };
+    } catch (error) {
+      console.error("Merge positions error:", error);
+      return { success: false };
+    }
   };
 
   // Clear error messages when user changes inputs

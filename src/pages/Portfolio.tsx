@@ -5,12 +5,11 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useWallet } from '@/contexts/WalletContext'
-import { CONTRACT_ADDRESSES, stacksNetwork } from '@/lib/config'
-import { bufferCV, cvToValue, principalCV, uintCV, AnchorMode, PostConditionMode } from '@stacks/transactions'
+import { CONTRACT_ADDRESSES } from '@/lib/config'
+import { bufferCV, cvToValue, principalCV, uintCV } from '@stacks/transactions'
 import { hexToBytes } from '@stacks/common'
 import { apiRequest } from '@/api/client'
 import type { Market } from '@/types/api'
-import { openContractCall } from '@stacks/connect'
 import { checkMergeablePairs, waitForTransactionConfirmation } from '@/utils/stacksHelpers'
 
 interface PositionBalance {
@@ -38,7 +37,7 @@ interface MergeableMarket {
 }
 
 export function Portfolio() {
-  const { isConnected, userData, readContract } = useWallet()
+  const { isConnected, userData, readContract, callContract } = useWallet()
   const address = userData?.addresses?.stx?.[0]?.address
   const [positions, setPositions] = useState<PositionBalance[]>([])
   const [loading, setLoading] = useState(true)
@@ -182,50 +181,38 @@ export function Portfolio() {
       const [contractAddress, contractName] = CONTRACT_ADDRESSES.CONDITIONAL_TOKENS.split('.')
       const amountMicroSats = Math.floor(market.mergeableAmount * 1_000_000)
 
-      await new Promise<void>((resolve, reject) => {
-        openContractCall({
-          network: stacksNetwork,
-          anchorMode: AnchorMode.Any,
-          contractAddress,
-          contractName,
-          functionName: 'merge-positions',
-          functionArgs: [
-            uintCV(amountMicroSats),
-            bufferCV(hexToBytes(market.conditionId.replace('0x', ''))),
-            principalCV(address),
-          ],
-          postConditionMode: PostConditionMode.Allow,
-          onFinish: async (data) => {
-            setMergeMessage(`⏳ Waiting for confirmation (${data.txId.slice(0, 8)}...)...`)
+      const response = await callContract(
+        contractAddress,
+        contractName,
+        'merge-positions',
+        [
+          uintCV(amountMicroSats),
+          bufferCV(hexToBytes(market.conditionId.replace('0x', ''))),
+          principalCV(address),
+        ]
+      )
 
-            try {
-              const confirmation = await waitForTransactionConfirmation(data.txId)
+      setMergeMessage(`⏳ Waiting for confirmation (${response.txid.slice(0, 8)}...)...`)
 
-              if (confirmation.success) {
-                setMergeMessage(`✅ Merged ${market.mergeableAmount.toFixed(4)} sBTC successfully!`)
-                setTimeout(() => {
-                  loadPositions()
-                  setMergeMessage(undefined)
-                }, 2000)
-              } else {
-                setMergeMessage(`❌ Merge failed: ${confirmation.status}`)
-              }
-            } catch (error) {
-              setMergeMessage('⏱️ Transaction timeout - please check blockchain')
-            }
+      try {
+        const confirmation = await waitForTransactionConfirmation(response.txid)
 
-            resolve()
-          },
-          onCancel: () => {
-            setMergeMessage('Merge cancelled')
-            setTimeout(() => setMergeMessage(undefined), 2000)
-            reject(new Error('Cancelled'))
-          },
-        })
-      })
+        if (confirmation.success) {
+          setMergeMessage(`✅ Merged ${market.mergeableAmount.toFixed(4)} sBTC successfully!`)
+          setTimeout(() => {
+            loadPositions()
+            setMergeMessage(undefined)
+          }, 2000)
+        } else {
+          setMergeMessage(`❌ Merge failed: ${confirmation.status}`)
+        }
+      } catch (error) {
+        setMergeMessage('⏱️ Transaction timeout - please check blockchain')
+      }
     } catch (error) {
       console.error('Merge error:', error)
-      setMergeMessage(undefined)
+      setMergeMessage('Merge cancelled or failed')
+      setTimeout(() => setMergeMessage(undefined), 2000)
     } finally {
       setMerging(false)
     }
