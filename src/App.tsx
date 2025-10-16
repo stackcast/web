@@ -5,6 +5,8 @@ import { Markets } from '@/pages/Markets'
 import { MarketDetail } from '@/pages/MarketDetail'
 import { Oracle } from '@/pages/Oracle'
 import { Voting } from '@/pages/Voting'
+import { Portfolio } from '@/pages/Portfolio'
+import { Redeem } from '@/pages/Redeem'
 import { WalletProvider } from '@/contexts/WalletContext'
 
 const queryClient = new QueryClient({
@@ -24,7 +26,9 @@ export function App() {
         <Routes>
           <Route path="/" element={<Layout />}>
             <Route index element={<Markets />} />
-            <Route path="market/:marketId" element={<MarketDetail />} />
+            <Route path="markets/:marketId" element={<MarketDetail />} />
+            <Route path="portfolio" element={<Portfolio />} />
+            <Route path="redeem" element={<Redeem />} />
             <Route path="oracle" element={<Oracle />} />
             <Route path="voting" element={<Voting />} />
             <Route path="*" element={<Navigate to="/" replace />} />

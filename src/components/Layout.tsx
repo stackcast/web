@@ -37,6 +37,12 @@ export function Layout() {
               <Button variant={isActive('/') ? 'default' : 'ghost'} asChild>
                 <Link to="/">Markets</Link>
               </Button>
+              <Button variant={isActive('/portfolio') ? 'default' : 'ghost'} asChild>
+                <Link to="/portfolio">Portfolio</Link>
+              </Button>
+              <Button variant={isActive('/redeem') ? 'default' : 'ghost'} asChild>
+                <Link to="/redeem">Redeem</Link>
+              </Button>
               <Button variant={isActive('/oracle') ? 'default' : 'ghost'} asChild>
                 <Link to="/oracle">Oracle</Link>
               </Button>

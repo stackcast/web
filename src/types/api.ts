@@ -122,3 +122,83 @@ export interface TradeResponse {
   trades: Trade[]
   count: number
 }
+
+export type OrderType = 'LIMIT' | 'MARKET'
+
+export interface ExecutionLevel {
+  price: number
+  size: number
+  cumulativeSize: number
+  cost: number
+}
+
+export interface ExecutionPlan {
+  orderType: OrderType
+  totalSize: number
+  levels: ExecutionLevel[]
+  averagePrice: number
+  totalCost: number
+  slippage: number
+  worstPrice: number
+  bestPrice: number
+  feasible: boolean
+  reason?: string
+}
+
+export interface SmartOrderRequest {
+  maker: string
+  marketId: string
+  outcome: 'yes' | 'no'
+  side: OrderSide
+  orderType: OrderType
+  size: number
+  price?: number
+  maxSlippage?: number
+  salt?: string
+  expiration?: number
+  signature?: string
+  publicKey?: string
+}
+
+export interface SmartOrderPreviewRequest {
+  marketId: string
+  outcome: 'yes' | 'no'
+  side: OrderSide
+  orderType: OrderType
+  size: number
+  price?: number
+  maxSlippage?: number
+}
+
+export interface SmartOrderPreviewResponse {
+  success: boolean
+  plan: ExecutionPlan
+}
+
+export interface SmartOrderResponse {
+  success: boolean
+  orderType: OrderType
+  order?: {
+    orderId: string
+    marketId: string
+    side: OrderSide
+    outcome: string
+    price: number
+    size: number
+    status: OrderStatus
+  }
+  orders?: Array<{
+    orderId: string
+    price: number
+    size: number
+  }>
+  executionPlan?: {
+    averagePrice: number
+    totalCost: number
+    slippage: number
+    levels: number
+  }
+  message: string
+  requiresSignature?: boolean
+  plan?: ExecutionPlan
+}

@@ -6,18 +6,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { useApiQuery } from '@/hooks/use-api'
-import { api } from '@/lib/api-client'
+import { useMarkets, useMarketStats } from '@/api/queries/markets'
+import { useTrades } from '@/api/queries/orderbook'
 import type { Trade } from '@/types/api'
 
 const formatDate = (timestamp: number) => new Date(timestamp).toLocaleString()
 
 export function Oracle() {
-  const marketsQuery = useApiQuery('oracle-markets', (signal) => api.getMarkets(signal), {
-    refreshIntervalMs: 8000
-  })
-
-  const markets = useMemo(() => marketsQuery.data?.markets ?? [], [marketsQuery.data?.markets])
+  const { data: markets = [], isLoading: marketsLoading } = useMarkets()
 
   const [selectedMarketId, setSelectedMarketId] = useState<string>('')
   const [evidenceUrl, setEvidenceUrl] = useState<string>('')
@@ -26,25 +22,8 @@ export function Oracle() {
   const selectedMarket =
     markets.find((market) => market.marketId === selectedMarketId) || markets[0] || undefined
 
-  const statsQuery = useApiQuery(
-    `oracle-stats-${selectedMarket?.marketId ?? 'none'}`,
-    (signal) => (selectedMarket ? api.getMarketStats(selectedMarket.marketId, signal) : Promise.resolve(undefined)),
-    {
-      enabled: Boolean(selectedMarket),
-      refreshIntervalMs: 6000,
-      watch: [selectedMarket?.marketId]
-    }
-  )
-
-  const tradesQuery = useApiQuery(
-    `oracle-trades-${selectedMarket?.marketId ?? 'none'}`,
-    (signal) => (selectedMarket ? api.getTrades(selectedMarket.marketId, 8, signal) : Promise.resolve(undefined)),
-    {
-      enabled: Boolean(selectedMarket),
-      refreshIntervalMs: 7000,
-      watch: [selectedMarket?.marketId]
-    }
-  )
+  const { data: stats } = useMarketStats(selectedMarket?.marketId || '')
+  const { data: trades = [] } = useTrades(selectedMarket?.marketId || '', 8)
 
   const activeMarkets = useMemo(() => markets.filter((market) => !market.resolved), [markets])
   const resolvedMarkets = useMemo(() => markets.filter((market) => market.resolved), [markets])
@@ -81,17 +60,17 @@ export function Oracle() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <InsightCard label="Active markets" value={activeMarkets.length} isLoading={marketsQuery.isLoading} />
-        <InsightCard label="Resolved markets" value={resolvedMarkets.length} isLoading={marketsQuery.isLoading} />
+        <InsightCard label="Active markets" value={activeMarkets.length} isLoading={marketsLoading} />
+        <InsightCard label="Resolved markets" value={resolvedMarkets.length} isLoading={marketsLoading} />
         <InsightCard
           label="Selected YES price"
           value={selectedMarket ? `${selectedMarket.yesPrice.toFixed(2)}¢` : '—'}
-          isLoading={marketsQuery.isLoading}
+          isLoading={marketsLoading}
         />
         <InsightCard
           label="Selected NO price"
           value={selectedMarket ? `${selectedMarket.noPrice.toFixed(2)}¢` : '—'}
-          isLoading={marketsQuery.isLoading}
+          isLoading={marketsLoading}
         />
       </div>
 
@@ -103,7 +82,7 @@ export function Oracle() {
         <CardContent className="space-y-4">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div className="text-sm text-muted-foreground">
-              {marketsQuery.isLoading
+              {marketsLoading
                 ? 'Loading markets…'
                 : `${activeMarkets.length} active • ${resolvedMarkets.length} resolved`}
             </div>
@@ -248,10 +227,10 @@ export function Oracle() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <Metric label="Total orders" value={statsQuery.data?.stats.totalOrders} />
-            <Metric label="Open orders" value={statsQuery.data?.stats.openOrders} />
-            <Metric label="Total trades" value={statsQuery.data?.stats.totalTrades} />
-            <Metric label="Last price" value={statsQuery.data?.stats.lastPrice?.toFixed(2)} suffix="¢" />
+            <Metric label="Total orders" value={stats?.totalOrders} />
+            <Metric label="Open orders" value={stats?.openOrders} />
+            <Metric label="Total trades" value={stats?.totalTrades} />
+            <Metric label="Last price" value={stats?.lastPrice?.toFixed(2)} suffix="¢" />
           </div>
           <Separator />
           <div className="space-y-2">
@@ -266,8 +245,8 @@ export function Oracle() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {tradesQuery.data?.trades?.length ? (
-                  tradesQuery.data.trades.map((trade: Trade) => (
+                {trades.length ? (
+                  trades.map((trade: Trade) => (
                     <TableRow key={trade.tradeId}>
                       <TableCell>{trade.price.toFixed(2)}¢</TableCell>
                       <TableCell>{trade.size}</TableCell>

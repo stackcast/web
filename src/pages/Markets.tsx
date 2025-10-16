@@ -1,13 +1,10 @@
-import type { FormEvent } from 'react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { api } from '@/lib/api-client'
+import { useMarkets } from '@/api/queries/markets'
 import type { Market } from '@/types/api'
 
 type StatusFilter = 'all' | 'active' | 'resolved'
@@ -28,33 +25,11 @@ const formatDate = (timestamp: number) => {
 export function Markets() {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
-  const [creator, setCreator] = useState('')
-  const [question, setQuestion] = useState('')
-  const [conditionId, setConditionId] = useState('')
 
-  const queryClient = useQueryClient()
-
-  const { data, isLoading, error, isRefetching } = useQuery({
-    queryKey: ['markets'],
-    queryFn: () => api.getMarkets(new AbortController().signal),
-    refetchInterval: 5000,
-  })
-
-  const createMarketMutation = useMutation({
-    mutationFn: (params: { question: string; creator: string; conditionId?: string }) =>
-      api.createMarket(params),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['markets'] })
-      setQuestion('')
-      setCreator('')
-      setConditionId('')
-    },
-  })
-
-  const markets = useMemo(() => data?.markets ?? [], [data?.markets])
+  const { data: markets = [], isLoading, error, isRefetching } = useMarkets()
 
   const filteredMarkets = useMemo(() => {
-    return markets.filter((market) => {
+    return (markets || []).filter((market) => {
       const matchesSearch =
         !searchTerm ||
         market.question.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -67,63 +42,13 @@ export function Markets() {
     })
   }, [markets, searchTerm, statusFilter])
 
-  const handleCreateMarket = async (event: FormEvent) => {
-    event.preventDefault()
-    if (!question || !creator) return
-    createMarketMutation.mutate({ question, creator, conditionId: conditionId || undefined })
-  }
-
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h1 className="text-4xl font-bold tracking-tight">Markets</h1>
-          <p className="text-muted-foreground">
-            Bitcoin-backed prediction markets resolved through the optimistic oracle.
-          </p>
-        </div>
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button size="lg">Create market</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Create a new market</DialogTitle>
-              <DialogDescription>Submit a new yes/no condition to the matching engine.</DialogDescription>
-            </DialogHeader>
-            <form className="space-y-4 pt-4" onSubmit={handleCreateMarket}>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Question</label>
-                <Input
-                  placeholder="Will BTC close above $100k on Dec 31?"
-                  value={question}
-                  onChange={(event) => setQuestion(event.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Creator principal</label>
-                <Input
-                  placeholder="ST..."
-                  value={creator}
-                  onChange={(event) => setCreator(event.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Condition ID (optional)</label>
-                <Input
-                  placeholder="market_btc_2025"
-                  value={conditionId}
-                  onChange={(event) => setConditionId(event.target.value)}
-                />
-              </div>
-              <Button className="w-full" type="submit" disabled={createMarketMutation.isPending}>
-                {createMarketMutation.isPending ? 'Creating…' : 'Create market'}
-              </Button>
-            </form>
-          </DialogContent>
-        </Dialog>
+      <div>
+        <h1 className="text-4xl font-bold tracking-tight">Markets</h1>
+        <p className="text-muted-foreground">
+          Bitcoin-backed prediction markets resolved through the optimistic oracle.
+        </p>
       </div>
 
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -162,15 +87,15 @@ export function Markets() {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {filteredMarkets.map((market) => (
-          <Link key={market.marketId} to={`/market/${market.marketId}`}>
+          <Link key={market.marketId} to={`/markets/${market.marketId}`}>
             <Card className="h-full transition hover:border-primary">
               <CardHeader>
                 <div className="flex items-start justify-between gap-3">
-                  <CardTitle className="text-lg leading-tight line-clamp-3">{market.question}</CardTitle>
-                  <Badge variant={badgeVariant(market)}>{market.resolved ? 'Resolved' : 'Active'}</Badge>
+                  <CardTitle className="text-lg leading-tight line-clamp-3 break-words">{market.question}</CardTitle>
+                  <Badge variant={badgeVariant(market)} className="shrink-0">{market.resolved ? 'Resolved' : 'Active'}</Badge>
                 </div>
                 <CardDescription className="flex flex-col gap-1 text-xs">
-                  <span>ID: {market.marketId}</span>
+                  <span className="break-all">ID: {market.marketId}</span>
                   <span>Created {formatDate(market.createdAt)}</span>
                 </CardDescription>
               </CardHeader>
