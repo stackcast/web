@@ -151,6 +151,14 @@ export function MarketDetail() {
       CONTRACT_ADDRESSES.CONDITIONAL_TOKENS.split(".");
     const amountMicroSats = Math.floor(amount * 1_000_000); // Convert to micro-satoshis
 
+    console.log('Split position details:', {
+      contractAddress,
+      contractName,
+      amount: amountMicroSats,
+      conditionId: market.conditionId,
+      network: stacksNetwork
+    });
+
     return new Promise((resolve) => {
       openContractCall({
         network: stacksNetwork,
