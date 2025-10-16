@@ -10,7 +10,7 @@ import {
   type ClarityValue,
 } from "@stacks/transactions";
 import type { ReactNode } from "react";
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useMemo, useState } from "react";
 import { networkIdentifier, stacksNetwork } from "../lib/config";
 
 // Declare Leather provider type for window
@@ -21,10 +21,12 @@ declare global {
 }
 
 interface UserData {
-  addresses: {
-    stx: Array<{ address: string }>;
-    btc: Array<{ address: string }>;
-  };
+  addresses: Array<{
+    symbol: string;
+    address: string;
+    publicKey?: string;
+    type?: string;
+  }>;
 }
 
 interface SignMessageResponse {
@@ -79,7 +81,16 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     if (isConnected()) {
       const storedData = getLocalStorage();
       if (storedData?.addresses) {
-        return storedData as UserData;
+        // Convert the stored data structure to our UserData format
+        const stxAddresses = storedData.addresses.stx || [];
+        const btcAddresses = storedData.addresses.btc || [];
+
+        const flatAddresses = [
+          ...stxAddresses.map(addr => ({ ...addr, symbol: 'STX' })),
+          ...btcAddresses.map(addr => ({ ...addr, symbol: 'BTC' }))
+        ];
+
+        return { addresses: flatAddresses };
       }
     }
     return null;
@@ -223,7 +234,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     }
   };
 
-  const value: WalletContextType = {
+  const value: WalletContextType = useMemo(() => ({
     isConnected: isConnectedState,
     userData,
     connectWallet,
@@ -234,7 +245,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     readContract,
     isLoading,
     error,
-  };
+  }), [isConnectedState, userData, connectWallet, disconnectWallet, getAccount, signMessage, callContract, readContract, isLoading, error]);
 
   return (
     <WalletContext.Provider value={value}>{children}</WalletContext.Provider>

@@ -1,4 +1,3 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { HelmetProvider } from 'react-helmet-async'
 import { Layout } from '@/components/Layout'
@@ -11,16 +10,6 @@ import { Redeem } from '@/pages/Redeem'
 import { WalletProvider } from '@/contexts/WalletContext'
 import { useEffect } from 'react'
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      retry: 1,
-      staleTime: 5000,
-    },
-  },
-})
-
 export function App() {
   // Enable dark mode by default for StackCast brand
   useEffect(() => {
@@ -29,21 +18,19 @@ export function App() {
 
   return (
     <HelmetProvider>
-      <QueryClientProvider client={queryClient}>
-        <WalletProvider>
-          <Routes>
-            <Route path="/" element={<Layout />}>
-              <Route index element={<Markets />} />
-              <Route path="markets/:marketId" element={<MarketDetail />} />
-              <Route path="portfolio" element={<Portfolio />} />
-              <Route path="redeem" element={<Redeem />} />
-              <Route path="oracle" element={<Oracle />} />
-              <Route path="voting" element={<Voting />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Route>
-          </Routes>
-        </WalletProvider>
-      </QueryClientProvider>
+      <WalletProvider>
+        <Routes>
+          <Route path="/" element={<Layout />}>
+            <Route index element={<Markets />} />
+            <Route path="markets/:marketId" element={<MarketDetail />} />
+            <Route path="portfolio" element={<Portfolio />} />
+            <Route path="redeem" element={<Redeem />} />
+            <Route path="oracle" element={<Oracle />} />
+            <Route path="voting" element={<Voting />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </WalletProvider>
     </HelmetProvider>
   )
 }

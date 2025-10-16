@@ -78,12 +78,12 @@ export function MarketDetail() {
   const { marketId = "" } = useParams();
   const { isConnected, userData, signMessage, callContract } = useWallet();
 
-  // Initialize maker address from wallet context (handles both initial load and updates)
-  const walletAddress = isConnected && userData?.addresses?.stx?.[0]?.address
-    ? userData.addresses.stx[0].address
+  // Don't use local state for maker - derive it directly from wallet
+  // Find the STX address from the addresses array
+  const maker = isConnected && userData?.addresses
+    ? userData.addresses.find(addr => addr.symbol === 'STX')?.address || ""
     : "";
 
-  const [maker, setMaker] = useState(walletAddress);
   const [side, setSide] = useState<OrderSide>("BUY");
   const [outcome, setOutcome] = useState<Outcome>("yes");
   const [orderType, setOrderType] = useState<OrderType>("LIMIT");
@@ -95,11 +95,6 @@ export function MarketDetail() {
   const [errorMessage, setErrorMessage] = useState<string>();
   const [successMessage, setSuccessMessage] = useState<string>();
   const [isProcessing, setIsProcessing] = useState(false);
-
-  // Sync maker address when wallet connection changes
-  useEffect(() => {
-    setMaker(walletAddress);
-  }, [walletAddress]);
 
   // Fetch market data with TanStack Query
   const {
@@ -754,10 +749,11 @@ export function MarketDetail() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Maker address</label>
                   <Input
+                    key={maker || 'empty'}
                     placeholder="Connect wallet to auto-fill"
                     value={maker}
-                    onChange={(event) => setMaker(event.target.value)}
-                    disabled={isConnected}
+                    readOnly
+                    disabled={!isConnected}
                     required
                   />
                   {!isConnected && (
