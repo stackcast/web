@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { useMarkets } from '@/api/queries/markets'
+import { SEO } from '@/components/SEO'
 import type { Market } from '@/types/api'
 
 type StatusFilter = 'all' | 'active' | 'resolved'
@@ -43,11 +44,17 @@ export function Markets() {
   }, [markets, searchTerm, statusFilter])
 
   return (
-    <div className="space-y-8">
-      <div className="space-y-2">
-        <h1 className="text-5xl font-bold tracking-tight text-foreground">Markets</h1>
-        <p className="text-muted-foreground text-lg">
-          Bitcoin-backed prediction markets resolved through the optimistic oracle.
+    <>
+      <SEO
+        title="Markets"
+        description="Explore active prediction markets on Bitcoin. Trade on real-world events with transparent, decentralized markets powered by Stacks blockchain."
+        url="https://stackcast.xyz/"
+      />
+      <div className="space-y-8">
+        <div className="space-y-2">
+          <h1 className="text-5xl font-bold tracking-tight text-foreground">Markets</h1>
+          <p className="text-muted-foreground text-lg">
+            Bitcoin-backed prediction markets resolved through the optimistic oracle.
         </p>
       </div>
 
@@ -129,6 +136,7 @@ export function Markets() {
           </CardHeader>
         </Card>
       )}
-    </div>
+      </div>
+    </>
   )
 }

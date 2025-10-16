@@ -23,6 +23,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useWallet } from "@/contexts/WalletContext";
 import { PriceChart } from "@/components/PriceChart";
+import { SEO } from "@/components/SEO";
 import { CONTRACT_ADDRESSES } from "@/lib/config";
 import type {
   CombinedOrderbook,
@@ -585,14 +586,22 @@ export function MarketDetail() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-2 text-sm text-muted-foreground font-medium">
-        <Link to="/" className="hover:text-primary font-bold">
-          Markets
-        </Link>
-        <span>/</span>
-        <span className="font-bold text-foreground">{market.marketId}</span>
-      </div>
+    <>
+      <SEO
+        title={market.question}
+        description={`Trade on: ${market.question}. Current YES price: ${formatPrice(market.yesPrice)}, NO price: ${formatPrice(market.noPrice)}. ${market.resolved ? 'Market resolved' : 'Market active'}.`}
+        url={`https://stackcast.xyz/markets/${market.marketId}`}
+        type="article"
+        keywords={['prediction market', market.question, 'bitcoin', 'stacks', 'trading', market.resolved ? 'resolved' : 'active']}
+      />
+      <div className="space-y-6">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground font-medium">
+          <Link to="/" className="hover:text-primary font-bold">
+            Markets
+          </Link>
+          <span>/</span>
+          <span className="font-bold text-foreground">{market.marketId}</span>
+        </div>
 
       <Card className="border-2 border-primary rounded-2xl bg-primary shadow-2xl shadow-primary/20 p-8">
         <CardHeader className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -979,7 +988,8 @@ export function MarketDetail() {
           </Card>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }
 
