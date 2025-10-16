@@ -11,6 +11,7 @@ import { hexToBytes } from '@stacks/common'
 import { apiRequest } from '@/api/client'
 import type { Market } from '@/types/api'
 import { checkMergeablePairs, waitForTransactionConfirmation } from '@/utils/stacksHelpers'
+import { Wallet } from 'lucide-react'
 
 interface PositionBalance {
   marketId: string
@@ -242,14 +243,14 @@ export function Portfolio() {
 
   if (!isConnected) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-4xl font-bold">Portfolio</h1>
-          <p className="text-muted-foreground mt-2">View your position tokens across all markets</p>
+      <div className="space-y-8">
+        <div className="space-y-2">
+          <h1 className="text-5xl font-bold tracking-tight">Portfolio</h1>
+          <p className="text-muted-foreground text-lg">View your position tokens across all markets</p>
         </div>
         <Card className="border-yellow-500/50 bg-yellow-500/5">
           <CardContent className="pt-6">
-            <p className="text-sm text-yellow-600 dark:text-yellow-400">
+            <p className="text-sm text-yellow-600 dark:text-yellow-400 font-medium">
               Connect your wallet to view your portfolio
             </p>
           </CardContent>
@@ -259,15 +260,15 @@ export function Portfolio() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-bold">Portfolio</h1>
-          <p className="text-muted-foreground mt-2">
+        <div className="space-y-2">
+          <h1 className="text-5xl font-bold tracking-tight">Portfolio</h1>
+          <p className="text-muted-foreground text-lg">
             Your position tokens across all markets
           </p>
         </div>
-        <Button onClick={loadPositions} disabled={loading}>
+        <Button onClick={loadPositions} disabled={loading} className="rounded-xl font-medium px-6">
           {loading ? 'Loading...' : 'Refresh'}
         </Button>
       </div>
@@ -306,12 +307,15 @@ export function Portfolio() {
       </div>
 
       {mergeableMarkets.length > 0 && (
-        <Card className="border-green-500/50 bg-green-500/5">
+        <Card className="border-green-500/50 bg-green-500/5 shadow-md">
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle>💰 Withdraw to sBTC</CardTitle>
-                <CardDescription>
+                <CardTitle className="text-xl flex items-center gap-2">
+                  <Wallet className="h-5 w-5 text-green-600" />
+                  Withdraw to sBTC
+                </CardTitle>
+                <CardDescription className="text-base">
                   You have {mergeableMarkets.reduce((sum, m) => sum + m.mergeableAmount, 0).toFixed(4)} sBTC
                   in mergeable pairs across {mergeableMarkets.length} markets
                 </CardDescription>
@@ -320,6 +324,7 @@ export function Portfolio() {
                 onClick={mergeAllMarkets}
                 disabled={merging}
                 variant="default"
+                className="rounded-xl font-medium px-6"
               >
                 {merging ? 'Merging...' : 'Merge All'}
               </Button>

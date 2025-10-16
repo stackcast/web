@@ -10,6 +10,7 @@ import { bufferCV, cvToValue, uintCV, principalCV } from '@stacks/transactions'
 import { hexToBytes } from '@stacks/common'
 import { apiRequest } from '@/api/client'
 import type { Market } from '@/types/api'
+import { Award, X } from 'lucide-react'
 
 interface RedeemablePosition {
   marketId: string
@@ -194,14 +195,14 @@ export function Redeem() {
 
   if (!isConnected) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-4xl font-bold">Redeem Winnings</h1>
-          <p className="text-muted-foreground mt-2">Claim your payouts from resolved markets</p>
+      <div className="space-y-8">
+        <div className="space-y-2">
+          <h1 className="text-5xl font-bold tracking-tight">Redeem Winnings</h1>
+          <p className="text-muted-foreground text-lg">Claim your payouts from resolved markets</p>
         </div>
         <Card className="border-yellow-500/50 bg-yellow-500/5">
           <CardContent className="pt-6">
-            <p className="text-sm text-yellow-600 dark:text-yellow-400">
+            <p className="text-sm text-yellow-600 dark:text-yellow-400 font-medium">
               Connect your wallet to redeem your winnings
             </p>
           </CardContent>
@@ -211,15 +212,15 @@ export function Redeem() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-bold">Redeem Winnings</h1>
-          <p className="text-muted-foreground mt-2">
+        <div className="space-y-2">
+          <h1 className="text-5xl font-bold tracking-tight">Redeem Winnings</h1>
+          <p className="text-muted-foreground text-lg">
             Claim payouts from resolved markets
           </p>
         </div>
-        <Button onClick={loadRedeemablePositions} disabled={loading}>
+        <Button onClick={loadRedeemablePositions} disabled={loading} className="rounded-xl font-medium px-6">
           {loading ? 'Loading...' : 'Refresh'}
         </Button>
       </div>
@@ -256,10 +257,13 @@ export function Redeem() {
       </div>
 
       {winningPositions.length > 0 && (
-        <Card className="border-green-500/50">
+        <Card className="border-green-500/50 shadow-md">
           <CardHeader>
-            <CardTitle>💰 Winning Positions - Claim Your Rewards!</CardTitle>
-            <CardDescription>
+            <CardTitle className="text-xl flex items-center gap-2">
+              <Award className="h-5 w-5 text-green-600" />
+              Winning Positions - Claim Your Rewards!
+            </CardTitle>
+            <CardDescription className="text-base">
               These positions are worth sBTC. Click "Redeem" to claim.
             </CardDescription>
           </CardHeader>
@@ -314,7 +318,10 @@ export function Redeem() {
       {losingPositions.length > 0 && (
         <Card className="border-red-500/50 bg-red-500/5">
           <CardHeader>
-            <CardTitle>❌ Losing Positions</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <X className="h-5 w-5 text-red-600" />
+              Losing Positions
+            </CardTitle>
             <CardDescription>
               These positions have no value. You can still redeem them to clear your balance.
             </CardDescription>

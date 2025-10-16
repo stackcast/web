@@ -27,60 +27,81 @@ export function Layout() {
 
   return (
     <div className="min-h-screen bg-background">
-      <nav className="border-b">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-8">
-            <Link to="/" className="text-2xl font-bold">
-              StackCast
+      <nav className="border-b backdrop-blur-sm bg-background/95 sticky top-0 z-50 shadow-sm">
+        <div className="container mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-10">
+            <Link to="/" className="flex items-center gap-3 group transition-all">
+              <img src="/logo.png" alt="StackCast Logo" className="h-9 w-9 transition-transform group-hover:scale-110" />
+              <span className="text-2xl font-bold tracking-tight" style={{ color: '#F69502' }}>StackCast</span>
             </Link>
-            <div className="flex gap-4">
-              <Button variant={isActive('/') ? 'default' : 'ghost'} asChild>
+            <div className="flex gap-2">
+              <Button
+                variant={isActive('/') ? 'default' : 'ghost'}
+                asChild
+                className="rounded-xl font-medium transition-all"
+              >
                 <Link to="/">Markets</Link>
               </Button>
-              <Button variant={isActive('/portfolio') ? 'default' : 'ghost'} asChild>
+              <Button
+                variant={isActive('/portfolio') ? 'default' : 'ghost'}
+                asChild
+                className="rounded-xl font-medium transition-all"
+              >
                 <Link to="/portfolio">Portfolio</Link>
               </Button>
-              <Button variant={isActive('/redeem') ? 'default' : 'ghost'} asChild>
+              <Button
+                variant={isActive('/redeem') ? 'default' : 'ghost'}
+                asChild
+                className="rounded-xl font-medium transition-all"
+              >
                 <Link to="/redeem">Redeem</Link>
               </Button>
-              <Button variant={isActive('/oracle') ? 'default' : 'ghost'} asChild>
+              <Button
+                variant={isActive('/oracle') ? 'default' : 'ghost'}
+                asChild
+                className="rounded-xl font-medium transition-all"
+              >
                 <Link to="/oracle">Oracle</Link>
               </Button>
-              <Button variant={isActive('/voting') ? 'default' : 'ghost'} asChild>
+              <Button
+                variant={isActive('/voting') ? 'default' : 'ghost'}
+                asChild
+                className="rounded-xl font-medium transition-all"
+              >
                 <Link to="/voting">Voting</Link>
               </Button>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-3">
             {isConnected && getStxAddress() && (
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-xs">
+                <Badge variant="outline" className="text-xs font-mono px-3 py-1.5 rounded-lg">
                   {getShortAddress(getStxAddress()!)}
                 </Badge>
               </div>
             )}
-            <Button 
+            <Button
               onClick={handleWalletAction}
               disabled={isLoading}
               variant={isConnected ? "outline" : "default"}
-              className={isConnected ? "" : "bg-blue-600 hover:bg-blue-700"}
+              className="rounded-xl font-medium px-6 transition-all"
             >
               {isLoading ? "Connecting..." : isConnected ? "Disconnect" : "Connect Wallet"}
             </Button>
           </div>
         </div>
-        
+
         {error && (
-          <div className="container mx-auto px-4 pb-2">
-            <div className="p-2 bg-red-50 border border-red-200 rounded-md">
-              <p className="text-red-700 text-sm">Wallet Error: {error}</p>
+          <div className="container mx-auto px-6 pb-3">
+            <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-xl">
+              <p className="text-destructive text-sm font-medium">Wallet Error: {error}</p>
             </div>
           </div>
         )}
       </nav>
 
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-6 py-10">
         <Outlet />
       </main>
     </div>

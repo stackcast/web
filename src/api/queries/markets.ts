@@ -14,6 +14,7 @@ export const marketKeys = {
   details: () => [...marketKeys.all, 'detail'] as const,
   detail: (id: string) => [...marketKeys.details(), id] as const,
   stats: (id: string) => [...marketKeys.detail(id), 'stats'] as const,
+  priceHistory: (id: string, interval: string) => [...marketKeys.detail(id), 'price-history', interval] as const,
 }
 
 /**
@@ -60,6 +61,48 @@ export function useMarketStats(marketId: string) {
     },
     enabled: Boolean(marketId),
     refetchInterval: 6000
+  })
+}
+
+/**
+ * Fetch price history for chart (refreshes every 30s)
+ */
+export function usePriceHistory(marketId: string, interval: '5m' | '15m' | '1h' | '4h' | '1d' = '1h') {
+  return useQuery({
+    queryKey: marketKeys.priceHistory(marketId, interval),
+    queryFn: async () => {
+      const data = await apiRequest<{
+        success: boolean
+        priceHistory: Array<{
+          timestamp: number
+          yes: {
+            open: number
+            high: number
+            low: number
+            close: number
+            volume: number
+          }
+          no: {
+            open: number
+            high: number
+            low: number
+            close: number
+            volume: number
+          }
+        }>
+        currentPrice: {
+          yes: number
+          no: number
+        }
+        interval: string
+        dataPoints: number
+      }>(
+        `/api/markets/${marketId}/price-history?interval=${interval}&limit=100`
+      )
+      return data
+    },
+    enabled: Boolean(marketId),
+    refetchInterval: 30000 // Refresh every 30 seconds
   })
 }
 

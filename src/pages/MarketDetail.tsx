@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useWallet } from "@/contexts/WalletContext";
+import { PriceChart } from "@/components/PriceChart";
 import { CONTRACT_ADDRESSES } from "@/lib/config";
 import type {
   CombinedOrderbook,
@@ -143,7 +144,6 @@ export function MarketDetail() {
     const [contractAddress, contractName] =
       CONTRACT_ADDRESSES.CONDITIONAL_TOKENS.split(".");
     const amountMicroSats = Math.floor(amount * 1_000_000); // Convert to micro-satoshis
-
 
     try {
       const response = await callContract(
@@ -304,11 +304,11 @@ export function MarketDetail() {
         noPositionId: market.noPositionId,
       });
 
-
       if (balanceCheck.needsSplit) {
-        const shortfall = (
-          Number(balanceCheck.requiredBalance) - Number(balanceCheck.currentBalance)
-        ) / 1_000_000;
+        const shortfall =
+          (Number(balanceCheck.requiredBalance) -
+            Number(balanceCheck.currentBalance)) /
+          1_000_000;
         const action =
           side === "BUY"
             ? `buy ${outcome.toUpperCase()}`
@@ -316,7 +316,9 @@ export function MarketDetail() {
 
         const shouldSplit = window.confirm(
           `💳 Deposit Required\n\n` +
-            `To ${action}, you need to deposit ${shortfall.toFixed(2)} sBTC.\n\n` +
+            `To ${action}, you need to deposit ${shortfall.toFixed(
+              2
+            )} sBTC.\n\n` +
             `This will be converted to outcome tokens (YES+NO pairs).\n` +
             `You can merge them back to sBTC anytime.\n\n` +
             `Proceed with deposit?`
@@ -397,12 +399,17 @@ export function MarketDetail() {
 
       // Calculate amounts (in micro-sats for proper integer handling)
       const makerAmount = numericSize; // Number of tokens maker gives
-      const takerAmount = Math.floor(
-        orderType === "LIMIT"
-          ? numericSize * numericPrice!
-          : numericSize * 500_000 // Use 0.5 sBTC (500,000 micro-sats) as placeholder for market orders
-      );
 
+      let takerAmount: number;
+      if (orderType === "LIMIT") {
+        takerAmount = Math.floor(numericSize * numericPrice!);
+      } else {
+        // MARKET orders MUST have execution preview
+        if (!executionPreview) {
+          throw new Error("Cannot execute market order without execution preview");
+        }
+        takerAmount = Math.floor(executionPreview.averagePrice * numericSize);
+      }
 
       const signHash = await computeOrderHash(
         maker,
@@ -636,6 +643,12 @@ export function MarketDetail() {
           </div>
         </CardHeader>
       </Card>
+
+      <PriceChart
+        marketId={market.marketId}
+        currentYesPrice={market.yesPrice}
+        currentNoPrice={market.noPrice}
+      />
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
@@ -892,9 +905,8 @@ export function MarketDetail() {
                   orderType === "LIMIT" && (
                     <div className="rounded-md bg-blue-500/10 border border-blue-500/20 p-3 text-sm">
                       <div className="text-blue-400">
-                        💡 No {side === "BUY" ? "sellers" : "buyers"}? Your
-                        LIMIT order will provide liquidity until someone
-                        matches.
+                        No {side === "BUY" ? "sellers" : "buyers"}? Your LIMIT
+                        order will provide liquidity until someone matches.
                       </div>
                     </div>
                   )}

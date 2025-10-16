@@ -43,10 +43,10 @@ export function Markets() {
   }, [markets, searchTerm, statusFilter])
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-4xl font-bold tracking-tight">Markets</h1>
-        <p className="text-muted-foreground">
+    <div className="space-y-8">
+      <div className="space-y-2">
+        <h1 className="text-5xl font-bold tracking-tight">Markets</h1>
+        <p className="text-muted-foreground text-lg">
           Bitcoin-backed prediction markets resolved through the optimistic oracle.
         </p>
       </div>
@@ -56,7 +56,7 @@ export function Markets() {
           placeholder="Search by question or market id"
           value={searchTerm}
           onChange={(event) => setSearchTerm(event.target.value)}
-          className="md:max-w-sm"
+          className="md:max-w-sm rounded-xl h-11"
         />
         <div className="flex gap-2">
           {(Object.keys(statusLabels) as StatusFilter[]).map((filterKey) => (
@@ -64,6 +64,7 @@ export function Markets() {
               key={filterKey}
               variant={statusFilter === filterKey ? 'default' : 'outline'}
               onClick={() => setStatusFilter(filterKey)}
+              className="rounded-xl font-medium"
             >
               {statusLabels[filterKey]}
             </Button>
@@ -85,34 +86,34 @@ export function Markets() {
         {isRefetching && <span className="text-xs italic">Updating…</span>}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
         {filteredMarkets.map((market) => (
           <Link key={market.marketId} to={`/markets/${market.marketId}`}>
-            <Card className="h-full transition hover:border-primary">
+            <Card className="h-full transition-all hover:shadow-lg hover:border-primary/50 hover:scale-[1.02]">
               <CardHeader>
                 <div className="flex items-start justify-between gap-3">
                   <CardTitle className="text-lg leading-tight line-clamp-3 break-words">{market.question}</CardTitle>
-                  <Badge variant={badgeVariant(market)} className="shrink-0">{market.resolved ? 'Resolved' : 'Active'}</Badge>
+                  <Badge variant={badgeVariant(market)} className="shrink-0 rounded-lg px-3 py-1">{market.resolved ? 'Resolved' : 'Active'}</Badge>
                 </div>
                 <CardDescription className="flex flex-col gap-1 text-xs">
-                  <span className="break-all">ID: {market.marketId}</span>
+                  <span className="break-all font-mono">ID: {market.marketId}</span>
                   <span>Created {formatDate(market.createdAt)}</span>
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-xs uppercase text-muted-foreground">YES</div>
-                    <div className="text-2xl font-semibold">{market.yesPrice?.toFixed(2)}¢</div>
+                    <div className="text-xs uppercase text-muted-foreground font-medium tracking-wider">YES</div>
+                    <div className="text-2xl font-bold">{market.yesPrice?.toFixed(2)}¢</div>
                   </div>
                   <div className="text-right">
-                    <div className="text-xs uppercase text-muted-foreground">NO</div>
-                    <div className="text-2xl font-semibold">{market.noPrice?.toFixed(2)}¢</div>
+                    <div className="text-xs uppercase text-muted-foreground font-medium tracking-wider">NO</div>
+                    <div className="text-2xl font-bold">{market.noPrice?.toFixed(2)}¢</div>
                   </div>
                 </div>
-                <div className="text-sm text-muted-foreground">
-                  24h volume
-                  <span className="font-medium text-foreground ml-2">{market.volume24h?.toFixed(2)} sBTC</span>
+                <div className="text-sm text-muted-foreground flex items-center justify-between pt-2 border-t">
+                  <span>24h volume</span>
+                  <span className="font-semibold text-foreground">{market.volume24h?.toFixed(2)} sBTC</span>
                 </div>
               </CardContent>
             </Card>

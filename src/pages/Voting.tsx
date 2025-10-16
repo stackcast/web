@@ -25,6 +25,7 @@ import {
   uintCV,
 } from "@stacks/transactions";
 import { useEffect, useState } from "react";
+import { Trophy } from "lucide-react";
 
 interface DisputedQuestion {
   questionId: string;
@@ -198,10 +199,10 @@ export function Voting() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="space-y-2">
-        <h1 className="text-4xl font-bold">Voting Dashboard</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-5xl font-bold tracking-tight">Voting Dashboard</h1>
+        <p className="text-muted-foreground text-lg">
           Vote on disputed oracle questions, track your stakes, and claim
           rewards for correct votes.
         </p>
@@ -210,7 +211,7 @@ export function Voting() {
       {!address && (
         <Card className="border-yellow-500/50 bg-yellow-500/5">
           <CardContent className="pt-6">
-            <p className="text-sm text-yellow-600 dark:text-yellow-400">
+            <p className="text-sm text-yellow-600 dark:text-yellow-400 font-medium">
               Connect your wallet to vote and claim rewards
             </p>
           </CardContent>
@@ -238,10 +239,13 @@ export function Voting() {
       )}
 
       {claimableRewards.length > 0 && (
-        <Card className="border-green-500/50 bg-green-500/5">
+        <Card className="border-green-500/50 bg-green-500/5 shadow-md">
           <CardHeader>
-            <CardTitle>🎉 Claim Your Rewards</CardTitle>
-            <CardDescription>
+            <CardTitle className="text-xl flex items-center gap-2">
+              <Trophy className="h-5 w-5 text-green-600" />
+              Claim Your Rewards
+            </CardTitle>
+            <CardDescription className="text-base">
               You have unclaimed rewards from resolved disputes
             </CardDescription>
           </CardHeader>
