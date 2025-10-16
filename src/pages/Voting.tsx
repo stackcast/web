@@ -18,7 +18,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useWallet } from "@/contexts/WalletContext";
-import { CONTRACT_ADDRESSES, stacksNetwork } from "@/lib/config";
+import { CONTRACT_ADDRESSES, stacksNetwork, apiBaseUrl } from "@/lib/config";
 import { hexToBytes } from "@stacks/common";
 import { openContractCall } from "@stacks/connect";
 import {
@@ -46,8 +46,6 @@ interface DisputedQuestion {
   };
 }
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
-
 export function Voting() {
   const { userData } = useWallet();
   const address = userData?.addresses?.stx?.[0]?.address;
@@ -63,7 +61,7 @@ export function Voting() {
     const fetchDisputes = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`${API_URL}/api/oracle/disputes`);
+        const response = await fetch(`${apiBaseUrl}/api/oracle/disputes`);
         const data = await response.json();
 
         if (data.success && data.disputes) {
@@ -107,7 +105,7 @@ export function Voting() {
         disputes.map(async (dispute) => {
           try {
             const response = await fetch(
-              `${API_URL}/api/oracle/questions/${dispute.questionId.replace(
+              `${apiBaseUrl}/api/oracle/questions/${dispute.questionId.replace(
                 "0x",
                 ""
               )}/vote/${address}`

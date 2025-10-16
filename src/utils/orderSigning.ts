@@ -1,5 +1,9 @@
 import { openSignatureRequestPopup } from "@stacks/connect";
-import { serializeCVBytes, standardPrincipalCV, uintCV } from "@stacks/transactions";
+import {
+  serializeCVBytes,
+  standardPrincipalCV,
+  uintCV,
+} from "@stacks/transactions";
 
 /**
  * Compute order hash matching backend/contract implementation
@@ -33,10 +37,14 @@ export async function computeOrderHash(
   const takerPositionIdBuff = hexToBytes(takerPositionId);
 
   if (makerPositionIdBuff.length !== 32) {
-    throw new Error(`Maker position ID must be 32 bytes (64 hex chars), got ${makerPositionIdBuff.length} bytes`);
+    throw new Error(
+      `Maker position ID must be 32 bytes (64 hex chars), got ${makerPositionIdBuff.length} bytes`
+    );
   }
   if (takerPositionIdBuff.length !== 32) {
-    throw new Error(`Taker position ID must be 32 bytes (64 hex chars), got ${takerPositionIdBuff.length} bytes`);
+    throw new Error(
+      `Taker position ID must be 32 bytes (64 hex chars), got ${takerPositionIdBuff.length} bytes`
+    );
   }
 
   const makerAmountBuff = serializeCVBytes(uintCV(makerAmount));
@@ -47,13 +55,13 @@ export async function computeOrderHash(
   // Concatenate all buffers in the exact order as the contract
   const concatenated = new Uint8Array(
     makerBuff.length +
-    takerBuff.length +
-    makerPositionIdBuff.length +
-    takerPositionIdBuff.length +
-    makerAmountBuff.length +
-    takerAmountBuff.length +
-    saltBuff.length +
-    expirationBuff.length
+      takerBuff.length +
+      makerPositionIdBuff.length +
+      takerPositionIdBuff.length +
+      makerAmountBuff.length +
+      takerAmountBuff.length +
+      saltBuff.length +
+      expirationBuff.length
   );
 
   let offset = 0;
@@ -74,7 +82,7 @@ export async function computeOrderHash(
   concatenated.set(expirationBuff, offset);
 
   // Hash with SHA-256 using Web Crypto API
-  const hash = await crypto.subtle.digest('SHA-256', concatenated);
+  const hash = await crypto.subtle.digest("SHA-256", concatenated);
   return new Uint8Array(hash);
 }
 
@@ -82,7 +90,7 @@ export async function computeOrderHash(
  * Convert hex string to Uint8Array
  */
 function hexToBytes(hex: string): Uint8Array {
-  const cleanHex = hex.replace(/^0x/, '');
+  const cleanHex = hex.replace(/^0x/, "");
   const bytes = new Uint8Array(cleanHex.length / 2);
   for (let i = 0; i < cleanHex.length; i += 2) {
     bytes[i / 2] = parseInt(cleanHex.substring(i, i + 2), 16);
@@ -126,7 +134,7 @@ export async function signOrder(
     // Request signature from user's wallet using Stacks Connect
     const signatureRequest = {
       message: hashHex,
-      network: import.meta.env.VITE_STACKS_NETWORK || "testnet",
+      network: import.meta.env.VITE_STACKS_NETWORK || "devnet",
       onFinish: (data: any) => {
         resolve(data.signature);
       },

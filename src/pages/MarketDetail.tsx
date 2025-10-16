@@ -37,12 +37,18 @@ import {
   computeOrderHash,
   generateSalt,
 } from "@/utils/orderSigning";
+import {
+  checkIfNeedsSplit,
+  checkPositionBalance,
+  waitForTransactionConfirmation,
+} from "@/utils/stacksHelpers";
 import { hexToBytes } from "@stacks/common";
 import { openContractCall } from "@stacks/connect";
 import {
   AnchorMode,
   PostConditionMode,
   bufferCV,
+  principalCV,
   uintCV,
 } from "@stacks/transactions";
 import type { FormEvent } from "react";
@@ -136,8 +142,10 @@ export function MarketDetail() {
   );
 
   // Split position: convert sBTC into YES+NO outcome tokens
-  const splitPosition = async (amount: number): Promise<boolean> => {
-    if (!market) return false;
+  const splitPosition = async (
+    amount: number
+  ): Promise<{ success: boolean; txId?: string }> => {
+    if (!market) return { success: false };
 
     const [contractAddress, contractName] =
       CONTRACT_ADDRESSES.CONDITIONAL_TOKENS.split(".");
@@ -157,20 +165,65 @@ export function MarketDetail() {
         postConditionMode: PostConditionMode.Allow,
         onFinish: (data) => {
           setSuccessMessage(
-            `✅ Split ${amount} sBTC → ${amount} YES + ${amount} NO tokens (txid: ${data.txId.slice(
+            `✅ Deposited ${amount} sBTC into market (txid: ${data.txId.slice(
               0,
               8
             )}...)`
           );
-          resolve(true);
+          resolve({ success: true, txId: data.txId });
         },
         onCancel: () => {
-          setErrorMessage("Split-position cancelled");
-          resolve(false);
+          resolve({ success: false });
         },
       });
     });
   };
+
+  // Merge positions: convert YES+NO pairs back into sBTC
+  const mergePositions = async (
+    amount: number
+  ): Promise<{ success: boolean; txId?: string }> => {
+    if (!market || !maker) return { success: false };
+
+    const [contractAddress, contractName] =
+      CONTRACT_ADDRESSES.CONDITIONAL_TOKENS.split(".");
+    const amountMicroSats = Math.floor(amount * 1_000_000); // Convert to micro-satoshis
+
+    return new Promise((resolve) => {
+      openContractCall({
+        network: stacksNetwork,
+        anchorMode: AnchorMode.Any,
+        contractAddress,
+        contractName,
+        functionName: "merge-positions",
+        functionArgs: [
+          uintCV(amountMicroSats),
+          bufferCV(hexToBytes(market.conditionId.replace("0x", ""))),
+          principalCV(maker), // recipient address
+        ],
+        postConditionMode: PostConditionMode.Allow,
+        onFinish: (data) => {
+          setSuccessMessage(
+            `✅ Merged ${amount} YES+NO pairs → ${amount} sBTC returned (txid: ${data.txId.slice(
+              0,
+              8
+            )}...)`
+          );
+          resolve({ success: true, txId: data.txId });
+        },
+        onCancel: () => {
+          resolve({ success: false });
+        },
+      });
+    });
+  };
+
+  // Clear error messages when user changes inputs
+  useEffect(() => {
+    if (errorMessage) {
+      setErrorMessage(undefined);
+    }
+  }, [side, outcome, orderType, size, price, maxSlippage]);
 
   // Preview execution plan when size/price/orderType changes
   useEffect(() => {
@@ -249,23 +302,78 @@ export function MarketDetail() {
       setErrorMessage(undefined);
       setIsProcessing(true);
 
-      // Auto-split if needed for BUY orders (need opposite side tokens)
-      if (side === "BUY" && orderType === "LIMIT") {
-        // For buying YES, user needs NO tokens (and vice versa)
-        // Simplest approach: just prompt to split the exact order size
+      // Check if user needs to split position (both BUY and SELL)
+      const balanceCheck = await checkIfNeedsSplit({
+        userAddress: maker,
+        side,
+        outcome,
+        size: numericSize,
+        yesPositionId: market.yesPositionId,
+        noPositionId: market.noPositionId,
+      });
+
+      if (balanceCheck.needsSplit) {
+        const shortfall = (
+          Number(balanceCheck.requiredBalance - balanceCheck.currentBalance) /
+          1_000_000
+        ).toFixed(2);
+        const action =
+          side === "BUY"
+            ? `buy ${outcome.toUpperCase()}`
+            : `sell ${outcome.toUpperCase()}`;
+
         const shouldSplit = window.confirm(
-          `To place this order, you may need outcome tokens.\n\n` +
-            `Split ${numericSize} sBTC into ${numericSize} YES + ${numericSize} NO tokens?`
+          `💳 Deposit Required\n\n` +
+            `To ${action}, you need to deposit ${shortfall} sBTC.\n\n` +
+            `This will be converted to outcome tokens (YES+NO pairs).\n` +
+            `You can merge them back to sBTC anytime.\n\n` +
+            `Proceed with deposit?`
         );
 
-        if (shouldSplit) {
-          const splitSuccess = await splitPosition(numericSize);
-          if (!splitSuccess) {
+        if (!shouldSplit) {
+          setErrorMessage("Order cancelled - deposit required");
+          setIsProcessing(false);
+          return;
+        }
+
+        const splitAmount = Number(shortfall);
+        const splitResult = await splitPosition(splitAmount);
+
+        if (!splitResult.success) {
+          setErrorMessage("Deposit cancelled");
+          setIsProcessing(false);
+          return;
+        }
+
+        if (splitResult.txId) {
+          setSuccessMessage(
+            `⏳ Waiting for deposit confirmation (${splitResult.txId.slice(
+              0,
+              8
+            )}...)...`
+          );
+
+          try {
+            const confirmation = await waitForTransactionConfirmation(
+              splitResult.txId
+            );
+
+            if (confirmation.success) {
+              setSuccessMessage(
+                `✅ Deposit confirmed! Now placing your order...`
+              );
+            } else {
+              setErrorMessage(`❌ Deposit failed: ${confirmation.status}`);
+              setIsProcessing(false);
+              return;
+            }
+          } catch (error) {
+            setErrorMessage(
+              `⏱️ Deposit timeout - please check blockchain and try again`
+            );
             setIsProcessing(false);
             return;
           }
-          // Wait for blockchain confirmation
-          await new Promise((resolve) => setTimeout(resolve, 3000));
         }
       }
 
@@ -341,6 +449,78 @@ export function MarketDetail() {
             `✅ Limit order placed: ${side} ${numericSize} ${outcomeLabels[outcome]} @ ${response.order.price}¢`
           );
         }
+
+        // Auto-merge after SELL orders
+        if (side === "SELL") {
+          try {
+            // Check user's YES and NO balances
+            const yesBalance = await checkPositionBalance(
+              maker,
+              market.yesPositionId
+            );
+            const noBalance = await checkPositionBalance(
+              maker,
+              market.noPositionId
+            );
+
+            // Calculate mergeable pairs (minimum of both balances)
+            const mergeablePairs =
+              yesBalance < noBalance ? yesBalance : noBalance;
+
+            if (mergeablePairs > 0) {
+              const mergeAmount = Number(mergeablePairs) / 1_000_000; // Convert to sBTC
+
+              const shouldMerge = window.confirm(
+                `💰 Auto-Merge Available\n\n` +
+                  `You have ${mergeAmount.toFixed(
+                    4
+                  )} matching YES+NO pairs.\n` +
+                  `Merge them back to ${mergeAmount.toFixed(4)} sBTC?\n\n` +
+                  `Current balances:\n` +
+                  `YES: ${(Number(yesBalance) / 1_000_000).toFixed(4)}\n` +
+                  `NO: ${(Number(noBalance) / 1_000_000).toFixed(4)}`
+              );
+
+              if (shouldMerge) {
+                setSuccessMessage(
+                  `⏳ Merging ${mergeAmount.toFixed(4)} pairs to sBTC...`
+                );
+                const mergeResult = await mergePositions(mergeAmount);
+
+                if (mergeResult.success && mergeResult.txId) {
+                  setSuccessMessage(
+                    `⏳ Waiting for merge confirmation (${mergeResult.txId.slice(
+                      0,
+                      8
+                    )}...)...`
+                  );
+
+                  const confirmation = await waitForTransactionConfirmation(
+                    mergeResult.txId
+                  );
+
+                  if (confirmation.success) {
+                    setSuccessMessage(
+                      `✅ Order complete! Sold ${numericSize} ${
+                        outcomeLabels[outcome]
+                      } and merged ${mergeAmount.toFixed(
+                        4
+                      )} sBTC back to wallet`
+                    );
+                  } else {
+                    setErrorMessage(
+                      `⚠️ Merge transaction failed: ${confirmation.status}. You can manually merge later.`
+                    );
+                  }
+                }
+              }
+            }
+          } catch (error) {
+            console.error("Auto-merge check failed:", error);
+            // Don't fail the entire order if merge check fails
+          }
+        }
+
         setPrice("");
         setSize("");
         setExecutionPreview(null);
@@ -349,6 +529,7 @@ export function MarketDetail() {
     } catch (err) {
       setSuccessMessage(undefined);
       setErrorMessage((err as Error).message || "Failed to submit order");
+      placeOrderMutation.reset(); // Reset mutation state on error
     } finally {
       setIsProcessing(false);
     }
@@ -685,9 +866,15 @@ export function MarketDetail() {
                   </div>
                 )}
 
-                {executionPreview && !executionPreview.feasible && (
+                {executionPreview && !executionPreview.feasible && orderType === "MARKET" && (
                   <div className="rounded-md bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
-                    {executionPreview.reason || "Cannot execute order"}
+                    {executionPreview.reason || "Cannot execute market order"}
+                  </div>
+                )}
+
+                {executionPreview && !executionPreview.feasible && orderType === "LIMIT" && (
+                  <div className="rounded-md bg-blue-500/10 border border-blue-500/20 p-3 text-sm">
+                    <div className="text-blue-400">💡 No {side === "BUY" ? "sellers" : "buyers"}? Your LIMIT order will provide liquidity until someone matches.</div>
                   </div>
                 )}
 
@@ -703,7 +890,7 @@ export function MarketDetail() {
                   disabled={
                     isProcessing ||
                     placeOrderMutation.isPending ||
-                    (executionPreview !== null && !executionPreview.feasible)
+                    (orderType === "MARKET" && executionPreview !== null && !executionPreview.feasible)
                   }
                 >
                   {isProcessing

@@ -5,11 +5,13 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useWallet } from '@/contexts/WalletContext'
-import { CONTRACT_ADDRESSES } from '@/lib/config'
-import { bufferCV, cvToValue, principalCV } from '@stacks/transactions'
+import { CONTRACT_ADDRESSES, stacksNetwork } from '@/lib/config'
+import { bufferCV, cvToValue, principalCV, uintCV, AnchorMode, PostConditionMode } from '@stacks/transactions'
 import { hexToBytes } from '@stacks/common'
 import { apiRequest } from '@/api/client'
 import type { Market } from '@/types/api'
+import { openContractCall } from '@stacks/connect'
+import { checkMergeablePairs, waitForTransactionConfirmation } from '@/utils/stacksHelpers'
 
 interface PositionBalance {
   marketId: string
@@ -20,6 +22,19 @@ interface PositionBalance {
   balance: number
   currentPrice: number
   value: number
+  yesPositionId?: string
+  noPositionId?: string
+}
+
+interface MergeableMarket {
+  marketId: string
+  question: string
+  conditionId: string
+  yesPositionId: string
+  noPositionId: string
+  mergeableAmount: number
+  yesBalance: number
+  noBalance: number
 }
 
 export function Portfolio() {
@@ -28,6 +43,9 @@ export function Portfolio() {
   const [positions, setPositions] = useState<PositionBalance[]>([])
   const [loading, setLoading] = useState(true)
   const [totalValue, setTotalValue] = useState(0)
+  const [mergeableMarkets, setMergeableMarkets] = useState<MergeableMarket[]>([])
+  const [merging, setMerging] = useState(false)
+  const [mergeMessage, setMergeMessage] = useState<string>()
 
   useEffect(() => {
     if (!isConnected || !address) {
@@ -50,6 +68,7 @@ export function Portfolio() {
 
       const [contractAddress, contractName] = CONTRACT_ADDRESSES.CONDITIONAL_TOKENS.split('.')
       const positionBalances: PositionBalance[] = []
+      const mergeable: MergeableMarket[] = []
 
       // Check balance for each market's YES and NO positions
       for (const market of markets) {
@@ -118,10 +137,119 @@ export function Portfolio() {
 
       setPositions(positionBalances)
       setTotalValue(positionBalances.reduce((sum, p) => sum + p.value, 0))
+
+      // Check for mergeable pairs across all markets
+      for (const market of markets) {
+        try {
+          const { mergeableAmount, yesBalance, noBalance } = await checkMergeablePairs({
+            userAddress: address,
+            yesPositionId: market.yesPositionId,
+            noPositionId: market.noPositionId,
+          })
+
+          if (mergeableAmount > 0) {
+            mergeable.push({
+              marketId: market.marketId,
+              question: market.question,
+              conditionId: market.conditionId,
+              yesPositionId: market.yesPositionId,
+              noPositionId: market.noPositionId,
+              mergeableAmount: Number(mergeableAmount) / 1_000_000,
+              yesBalance: Number(yesBalance) / 1_000_000,
+              noBalance: Number(noBalance) / 1_000_000,
+            })
+          }
+        } catch (error) {
+          console.error(`Error checking mergeable pairs for ${market.marketId}:`, error)
+        }
+      }
+
+      setMergeableMarkets(mergeable)
     } catch (error) {
       console.error('Error loading positions:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const mergeMarketPairs = async (market: MergeableMarket) => {
+    if (!address) return
+
+    try {
+      setMerging(true)
+      setMergeMessage(`Merging ${market.mergeableAmount.toFixed(4)} pairs for ${market.question.slice(0, 50)}...`)
+
+      const [contractAddress, contractName] = CONTRACT_ADDRESSES.CONDITIONAL_TOKENS.split('.')
+      const amountMicroSats = Math.floor(market.mergeableAmount * 1_000_000)
+
+      await new Promise<void>((resolve, reject) => {
+        openContractCall({
+          network: stacksNetwork,
+          anchorMode: AnchorMode.Any,
+          contractAddress,
+          contractName,
+          functionName: 'merge-positions',
+          functionArgs: [
+            uintCV(amountMicroSats),
+            bufferCV(hexToBytes(market.conditionId.replace('0x', ''))),
+            principalCV(address),
+          ],
+          postConditionMode: PostConditionMode.Allow,
+          onFinish: async (data) => {
+            setMergeMessage(`⏳ Waiting for confirmation (${data.txId.slice(0, 8)}...)...`)
+
+            try {
+              const confirmation = await waitForTransactionConfirmation(data.txId)
+
+              if (confirmation.success) {
+                setMergeMessage(`✅ Merged ${market.mergeableAmount.toFixed(4)} sBTC successfully!`)
+                setTimeout(() => {
+                  loadPositions()
+                  setMergeMessage(undefined)
+                }, 2000)
+              } else {
+                setMergeMessage(`❌ Merge failed: ${confirmation.status}`)
+              }
+            } catch (error) {
+              setMergeMessage('⏱️ Transaction timeout - please check blockchain')
+            }
+
+            resolve()
+          },
+          onCancel: () => {
+            setMergeMessage('Merge cancelled')
+            setTimeout(() => setMergeMessage(undefined), 2000)
+            reject(new Error('Cancelled'))
+          },
+        })
+      })
+    } catch (error) {
+      console.error('Merge error:', error)
+      setMergeMessage(undefined)
+    } finally {
+      setMerging(false)
+    }
+  }
+
+  const mergeAllMarkets = async () => {
+    if (mergeableMarkets.length === 0) return
+
+    const totalMergeable = mergeableMarkets.reduce((sum, m) => sum + m.mergeableAmount, 0)
+
+    const confirmed = window.confirm(
+      `Merge all pairs across ${mergeableMarkets.length} markets?\n\n` +
+      `Total: ${totalMergeable.toFixed(4)} sBTC\n\n` +
+      mergeableMarkets.map(m =>
+        `• ${m.question.slice(0, 40)}...: ${m.mergeableAmount.toFixed(4)} sBTC`
+      ).join('\n')
+    )
+
+    if (!confirmed) return
+
+    for (const market of mergeableMarkets) {
+      await mergeMarketPairs(market)
+      // Small delay between merges
+      await new Promise(resolve => setTimeout(resolve, 1000))
     }
   }
 
@@ -189,6 +317,78 @@ export function Portfolio() {
           </CardHeader>
         </Card>
       </div>
+
+      {mergeableMarkets.length > 0 && (
+        <Card className="border-green-500/50 bg-green-500/5">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>💰 Withdraw to sBTC</CardTitle>
+                <CardDescription>
+                  You have {mergeableMarkets.reduce((sum, m) => sum + m.mergeableAmount, 0).toFixed(4)} sBTC
+                  in mergeable pairs across {mergeableMarkets.length} markets
+                </CardDescription>
+              </div>
+              <Button
+                onClick={mergeAllMarkets}
+                disabled={merging}
+                variant="default"
+              >
+                {merging ? 'Merging...' : 'Merge All'}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {mergeMessage && (
+              <div className="mb-4 p-3 rounded bg-muted text-sm">
+                {mergeMessage}
+              </div>
+            )}
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Market</TableHead>
+                  <TableHead className="text-right">YES Balance</TableHead>
+                  <TableHead className="text-right">NO Balance</TableHead>
+                  <TableHead className="text-right">Mergeable</TableHead>
+                  <TableHead>Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {mergeableMarkets.map((market) => (
+                  <TableRow key={market.marketId}>
+                    <TableCell className="max-w-xs">
+                      <div className="truncate">{market.question}</div>
+                      <div className="text-xs text-muted-foreground truncate">
+                        {market.marketId}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right font-mono">
+                      {market.yesBalance.toFixed(4)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono">
+                      {market.noBalance.toFixed(4)}
+                    </TableCell>
+                    <TableCell className="text-right font-semibold text-green-600">
+                      {market.mergeableAmount.toFixed(4)} sBTC
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => mergeMarketPairs(market)}
+                        disabled={merging}
+                      >
+                        Merge
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
