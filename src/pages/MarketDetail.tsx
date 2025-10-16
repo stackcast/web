@@ -77,7 +77,13 @@ const outcomeLabels: Record<Outcome, string> = {
 export function MarketDetail() {
   const { marketId = "" } = useParams();
   const { isConnected, userData, signMessage, callContract } = useWallet();
-  const [maker, setMaker] = useState("");
+
+  // Initialize maker address from wallet context (handles both initial load and updates)
+  const walletAddress = isConnected && userData?.addresses?.stx?.[0]?.address
+    ? userData.addresses.stx[0].address
+    : "";
+
+  const [maker, setMaker] = useState(walletAddress);
   const [side, setSide] = useState<OrderSide>("BUY");
   const [outcome, setOutcome] = useState<Outcome>("yes");
   const [orderType, setOrderType] = useState<OrderType>("LIMIT");
@@ -90,14 +96,10 @@ export function MarketDetail() {
   const [successMessage, setSuccessMessage] = useState<string>();
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Auto-fill maker address from connected wallet
+  // Sync maker address when wallet connection changes
   useEffect(() => {
-    if (isConnected && userData?.addresses?.stx?.[0]?.address) {
-      setMaker(userData.addresses.stx[0].address);
-    } else {
-      setMaker("");
-    }
-  }, [isConnected, userData]);
+    setMaker(walletAddress);
+  }, [walletAddress]);
 
   // Fetch market data with TanStack Query
   const {
