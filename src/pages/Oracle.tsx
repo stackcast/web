@@ -52,7 +52,7 @@ export function Oracle() {
   return (
     <div className="space-y-8">
       <div className="space-y-2">
-        <h1 className="text-5xl font-bold tracking-tight">Oracle Console</h1>
+        <h1 className="text-5xl font-bold tracking-tight text-foreground">Oracle Console</h1>
         <p className="text-muted-foreground text-lg">
           Monitor market queues, prepare optimistic oracle resolutions, and track recent settlements directly
           from the live matching engine APIs.

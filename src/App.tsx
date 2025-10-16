@@ -8,6 +8,7 @@ import { Voting } from '@/pages/Voting'
 import { Portfolio } from '@/pages/Portfolio'
 import { Redeem } from '@/pages/Redeem'
 import { WalletProvider } from '@/contexts/WalletContext'
+import { useEffect } from 'react'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -20,6 +21,11 @@ const queryClient = new QueryClient({
 })
 
 export function App() {
+  // Enable dark mode by default for StackCast brand
+  useEffect(() => {
+    document.documentElement.classList.add('dark')
+  }, [])
+
   return (
     <QueryClientProvider client={queryClient}>
       <WalletProvider>

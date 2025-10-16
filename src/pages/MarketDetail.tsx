@@ -553,12 +553,12 @@ export function MarketDetail() {
       <div className="space-y-4">
         <Link
           to="/"
-          className="text-sm text-muted-foreground hover:text-foreground"
+          className="text-sm text-muted-foreground hover:text-primary font-bold"
         >
           ← Back to markets
         </Link>
         <div className="text-muted-foreground">Loading market...</div>
-        <div className="h-40 animate-pulse rounded bg-muted" />
+        <div className="h-40 animate-pulse rounded-2xl bg-muted" />
       </div>
     );
   }
@@ -568,13 +568,13 @@ export function MarketDetail() {
       <div className="space-y-4">
         <Link
           to="/"
-          className="text-sm text-muted-foreground hover:text-foreground"
+          className="text-sm text-muted-foreground hover:text-primary font-bold"
         >
           ← Back to markets
         </Link>
-        <Card className="border-destructive">
+        <Card className="border-2 border-destructive rounded-2xl">
           <CardHeader>
-            <CardTitle className="text-destructive">Market not found</CardTitle>
+            <CardTitle className="text-destructive font-bold">Market not found</CardTitle>
             <CardDescription>
               {marketError?.message ?? "Unknown error"}
             </CardDescription>
@@ -586,57 +586,57 @@ export function MarketDetail() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Link to="/" className="hover:text-foreground">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground font-medium">
+        <Link to="/" className="hover:text-primary font-bold">
           Markets
         </Link>
         <span>/</span>
-        <span>{market.marketId}</span>
+        <span className="font-bold text-foreground">{market.marketId}</span>
       </div>
 
-      <Card>
+      <Card className="border-2 border-primary rounded-2xl bg-primary shadow-2xl shadow-primary/20 p-8">
         <CardHeader className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-3 flex-wrap">
               <Badge
                 variant={market.resolved ? "secondary" : "default"}
-                className="shrink-0"
+                className="shrink-0 bg-black/10 border-black/20 text-black"
               >
                 {market.resolved ? "Resolved" : "Active"}
               </Badge>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-xs text-black/70 font-medium">
                 Created {formatTimestamp(market.createdAt)}
               </span>
             </div>
-            <CardTitle className="text-2xl lg:text-3xl mt-2 break-words">
+            <CardTitle className="text-2xl lg:text-3xl mt-2 break-words text-black font-bold">
               {market.question}
             </CardTitle>
-            <CardDescription className="mt-1 break-all">
+            <CardDescription className="mt-1 break-all text-black/70 font-medium">
               Condition ID: {market.conditionId}
             </CardDescription>
           </div>
           <div className="flex gap-6 text-sm">
-            <div>
-              <div className="text-muted-foreground uppercase tracking-wide">
+            <div className="bg-black/10 rounded-xl p-4 border-2 border-black/20">
+              <div className="text-black/70 uppercase tracking-wide font-bold text-xs">
                 YES
               </div>
-              <div className="text-2xl font-semibold">
+              <div className="text-2xl font-bold text-black">
                 {formatPrice(market.yesPrice)}
               </div>
             </div>
-            <div>
-              <div className="text-muted-foreground uppercase tracking-wide">
+            <div className="bg-black/10 rounded-xl p-4 border-2 border-black/20">
+              <div className="text-black/70 uppercase tracking-wide font-bold text-xs">
                 NO
               </div>
-              <div className="text-2xl font-semibold">
+              <div className="text-2xl font-bold text-black">
                 {formatPrice(market.noPrice)}
               </div>
             </div>
-            <div>
-              <div className="text-muted-foreground uppercase tracking-wide">
+            <div className="bg-black/10 rounded-xl p-4 border-2 border-black/20">
+              <div className="text-black/70 uppercase tracking-wide font-bold text-xs">
                 Volume 24h
               </div>
-              <div className="text-2xl font-semibold">
+              <div className="text-2xl font-bold text-black">
                 {formatSats(market.volume24h)}
               </div>
             </div>
@@ -857,35 +857,35 @@ export function MarketDetail() {
                 </div>
 
                 {executionPreview && executionPreview.feasible && (
-                  <div className="rounded-md bg-muted p-3 space-y-1 text-sm">
-                    <div className="font-medium">Execution Preview</div>
+                  <div className="rounded-xl bg-black/10 border-2 border-black/20 p-4 space-y-2 text-sm">
+                    <div className="font-bold text-foreground">Execution Preview</div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Avg Price:</span>
-                      <span>{formatPrice(executionPreview.averagePrice)}</span>
+                      <span className="text-muted-foreground font-medium">Avg Price:</span>
+                      <span className="font-bold">{formatPrice(executionPreview.averagePrice)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Total Cost:</span>
-                      <span>{formatSats(executionPreview.totalCost)}</span>
+                      <span className="text-muted-foreground font-medium">Total Cost:</span>
+                      <span className="font-bold">{formatSats(executionPreview.totalCost)}</span>
                     </div>
                     {orderType === "MARKET" && (
                       <>
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">
+                          <span className="text-muted-foreground font-medium">
                             Slippage:
                           </span>
                           <span
                             className={
                               executionPreview.slippage > 2
-                                ? "text-orange-500"
-                                : ""
+                                ? "text-primary font-bold"
+                                : "font-bold"
                             }
                           >
                             {executionPreview.slippage.toFixed(2)}%
                           </span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">Levels:</span>
-                          <span>{executionPreview.levels.length}</span>
+                          <span className="text-muted-foreground font-medium">Levels:</span>
+                          <span className="font-bold">{executionPreview.levels.length}</span>
                         </div>
                       </>
                     )}
@@ -895,7 +895,7 @@ export function MarketDetail() {
                 {executionPreview &&
                   !executionPreview.feasible &&
                   orderType === "MARKET" && (
-                    <div className="rounded-md bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
+                    <div className="rounded-xl bg-destructive/10 border-2 border-destructive/20 p-4 text-sm text-destructive font-bold">
                       {executionPreview.reason || "Cannot execute market order"}
                     </div>
                   )}
@@ -903,8 +903,8 @@ export function MarketDetail() {
                 {executionPreview &&
                   !executionPreview.feasible &&
                   orderType === "LIMIT" && (
-                    <div className="rounded-md bg-blue-500/10 border border-blue-500/20 p-3 text-sm">
-                      <div className="text-blue-400">
+                    <div className="rounded-xl bg-primary/10 border-2 border-primary/20 p-4 text-sm">
+                      <div className="text-primary font-bold">
                         No {side === "BUY" ? "sellers" : "buyers"}? Your LIMIT
                         order will provide liquidity until someone matches.
                       </div>
@@ -912,10 +912,10 @@ export function MarketDetail() {
                   )}
 
                 {successMessage && (
-                  <p className="text-sm text-green-500">{successMessage}</p>
+                  <p className="text-sm text-green-500 font-bold">{successMessage}</p>
                 )}
                 {errorMessage && (
-                  <p className="text-sm text-destructive">{errorMessage}</p>
+                  <p className="text-sm text-destructive font-bold">{errorMessage}</p>
                 )}
                 <Button
                   className="w-full"

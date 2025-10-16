@@ -201,7 +201,7 @@ export function Voting() {
   return (
     <div className="space-y-8">
       <div className="space-y-2">
-        <h1 className="text-5xl font-bold tracking-tight">Voting Dashboard</h1>
+        <h1 className="text-5xl font-bold tracking-tight text-foreground">Voting Dashboard</h1>
         <p className="text-muted-foreground text-lg">
           Vote on disputed oracle questions, track your stakes, and claim
           rewards for correct votes.
@@ -209,9 +209,9 @@ export function Voting() {
       </div>
 
       {!address && (
-        <Card className="border-yellow-500/50 bg-yellow-500/5">
+        <Card className="border-2 border-primary rounded-2xl bg-primary shadow-2xl shadow-primary/20">
           <CardContent className="pt-6">
-            <p className="text-sm text-yellow-600 dark:text-yellow-400 font-medium">
+            <p className="text-sm text-black font-bold">
               Connect your wallet to vote and claim rewards
             </p>
           </CardContent>
@@ -239,13 +239,15 @@ export function Voting() {
       )}
 
       {claimableRewards.length > 0 && (
-        <Card className="border-green-500/50 bg-green-500/5 shadow-md">
+        <Card className="border-2 border-primary rounded-2xl bg-primary shadow-2xl shadow-primary/20 p-6">
           <CardHeader>
-            <CardTitle className="text-xl flex items-center gap-2">
-              <Trophy className="h-5 w-5 text-green-600" />
+            <CardTitle className="text-2xl font-bold text-black flex items-center gap-2">
+              <div className="bg-black/20 rounded-xl p-2">
+                <Trophy className="h-8 w-8 text-black" />
+              </div>
               Claim Your Rewards
             </CardTitle>
-            <CardDescription className="text-base">
+            <CardDescription className="text-base text-black/80 font-medium">
               You have unclaimed rewards from resolved disputes
             </CardDescription>
           </CardHeader>

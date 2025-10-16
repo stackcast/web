@@ -245,12 +245,12 @@ export function Portfolio() {
     return (
       <div className="space-y-8">
         <div className="space-y-2">
-          <h1 className="text-5xl font-bold tracking-tight">Portfolio</h1>
+          <h1 className="text-5xl font-bold tracking-tight text-foreground">Portfolio</h1>
           <p className="text-muted-foreground text-lg">View your position tokens across all markets</p>
         </div>
-        <Card className="border-yellow-500/50 bg-yellow-500/5">
+        <Card className="border-2 border-primary rounded-2xl bg-primary shadow-2xl shadow-primary/20">
           <CardContent className="pt-6">
-            <p className="text-sm text-yellow-600 dark:text-yellow-400 font-medium">
+            <p className="text-sm text-black font-bold">
               Connect your wallet to view your portfolio
             </p>
           </CardContent>
@@ -263,12 +263,12 @@ export function Portfolio() {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div className="space-y-2">
-          <h1 className="text-5xl font-bold tracking-tight">Portfolio</h1>
+          <h1 className="text-5xl font-bold tracking-tight text-foreground">Portfolio</h1>
           <p className="text-muted-foreground text-lg">
             Your position tokens across all markets
           </p>
         </div>
-        <Button onClick={loadPositions} disabled={loading} className="rounded-xl font-medium px-6">
+        <Button onClick={loadPositions} disabled={loading} className="rounded-xl font-bold px-6">
           {loading ? 'Loading...' : 'Refresh'}
         </Button>
       </div>
@@ -307,15 +307,17 @@ export function Portfolio() {
       </div>
 
       {mergeableMarkets.length > 0 && (
-        <Card className="border-green-500/50 bg-green-500/5 shadow-md">
+        <Card className="border-2 border-primary rounded-2xl bg-primary shadow-2xl shadow-primary/20 p-6">
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-xl flex items-center gap-2">
-                  <Wallet className="h-5 w-5 text-green-600" />
+                <CardTitle className="text-2xl font-bold text-black flex items-center gap-2">
+                  <div className="bg-black/20 rounded-xl p-2">
+                    <Wallet className="h-8 w-8 text-black" />
+                  </div>
                   Withdraw to sBTC
                 </CardTitle>
-                <CardDescription className="text-base">
+                <CardDescription className="text-base text-black/80 font-medium">
                   You have {mergeableMarkets.reduce((sum, m) => sum + m.mergeableAmount, 0).toFixed(4)} sBTC
                   in mergeable pairs across {mergeableMarkets.length} markets
                 </CardDescription>
@@ -324,7 +326,7 @@ export function Portfolio() {
                 onClick={mergeAllMarkets}
                 disabled={merging}
                 variant="default"
-                className="rounded-xl font-medium px-6"
+                className="rounded-xl font-bold px-8 bg-black/10 hover:bg-black/20 text-black border-2 border-black/20"
               >
                 {merging ? 'Merging...' : 'Merge All'}
               </Button>

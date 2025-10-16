@@ -197,12 +197,12 @@ export function Redeem() {
     return (
       <div className="space-y-8">
         <div className="space-y-2">
-          <h1 className="text-5xl font-bold tracking-tight">Redeem Winnings</h1>
+          <h1 className="text-5xl font-bold tracking-tight text-foreground">Redeem Winnings</h1>
           <p className="text-muted-foreground text-lg">Claim your payouts from resolved markets</p>
         </div>
-        <Card className="border-yellow-500/50 bg-yellow-500/5">
+        <Card className="border-2 border-primary rounded-2xl bg-primary shadow-2xl shadow-primary/20">
           <CardContent className="pt-6">
-            <p className="text-sm text-yellow-600 dark:text-yellow-400 font-medium">
+            <p className="text-sm text-black font-bold">
               Connect your wallet to redeem your winnings
             </p>
           </CardContent>
@@ -215,23 +215,23 @@ export function Redeem() {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div className="space-y-2">
-          <h1 className="text-5xl font-bold tracking-tight">Redeem Winnings</h1>
+          <h1 className="text-5xl font-bold tracking-tight text-foreground">Redeem Winnings</h1>
           <p className="text-muted-foreground text-lg">
             Claim payouts from resolved markets
           </p>
         </div>
-        <Button onClick={loadRedeemablePositions} disabled={loading} className="rounded-xl font-medium px-6">
+        <Button onClick={loadRedeemablePositions} disabled={loading} className="rounded-xl font-bold px-6">
           {loading ? 'Loading...' : 'Refresh'}
         </Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
-        <Card className="border-green-500/50 bg-green-500/5">
+        <Card className="border-2 border-primary rounded-2xl bg-primary shadow-2xl shadow-primary/20">
           <CardHeader className="space-y-1">
-            <CardDescription className="uppercase text-xs tracking-wide">
+            <CardDescription className="uppercase text-xs tracking-wide text-black/70 font-bold">
               Total Redeemable
             </CardDescription>
-            <CardTitle className="text-3xl text-green-600 dark:text-green-400">
+            <CardTitle className="text-3xl text-black font-bold">
               {totalRedeemable.toFixed(4)} sBTC
             </CardTitle>
           </CardHeader>
@@ -257,13 +257,15 @@ export function Redeem() {
       </div>
 
       {winningPositions.length > 0 && (
-        <Card className="border-green-500/50 shadow-md">
+        <Card className="border-2 border-primary rounded-2xl bg-primary shadow-2xl shadow-primary/20 p-6">
           <CardHeader>
-            <CardTitle className="text-xl flex items-center gap-2">
-              <Award className="h-5 w-5 text-green-600" />
+            <CardTitle className="text-2xl font-bold text-black flex items-center gap-2">
+              <div className="bg-black/20 rounded-xl p-2">
+                <Award className="h-8 w-8 text-black" />
+              </div>
               Winning Positions - Claim Your Rewards!
             </CardTitle>
-            <CardDescription className="text-base">
+            <CardDescription className="text-base text-black/80 font-medium">
               These positions are worth sBTC. Click "Redeem" to claim.
             </CardDescription>
           </CardHeader>
