@@ -26,7 +26,7 @@ interface RedeemablePosition {
 
 export function Redeem() {
   const { isConnected, userData, readContract, callContract } = useWallet()
-  const address = userData?.addresses?.stx?.[0]?.address
+  const address = userData?.addresses?.find(addr => addr.symbol === 'STX')?.address
   const [redeemablePositions, setRedeemablePositions] = useState<RedeemablePosition[]>([])
   const [loading, setLoading] = useState(true)
   const [redeeming, setRedeeming] = useState<string | null>(null)

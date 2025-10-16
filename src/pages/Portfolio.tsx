@@ -39,7 +39,7 @@ interface MergeableMarket {
 
 export function Portfolio() {
   const { isConnected, userData, readContract, callContract } = useWallet()
-  const address = userData?.addresses?.stx?.[0]?.address
+  const address = userData?.addresses?.find(addr => addr.symbol === 'STX')?.address
   const [positions, setPositions] = useState<PositionBalance[]>([])
   const [loading, setLoading] = useState(true)
   const [totalValue, setTotalValue] = useState(0)

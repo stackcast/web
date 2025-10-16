@@ -46,7 +46,7 @@ interface DisputedQuestion {
 
 export function Voting() {
   const { userData, callContract } = useWallet();
-  const address = userData?.addresses?.stx?.[0]?.address;
+  const address = userData?.addresses?.find(addr => addr.symbol === 'STX')?.address;
   const [selectedQuestion, setSelectedQuestion] =
     useState<DisputedQuestion | null>(null);
   const [voteChoice, setVoteChoice] = useState<"YES" | "NO">("YES");

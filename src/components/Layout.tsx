@@ -21,7 +21,7 @@ export function Layout() {
   };
 
   const getStxAddress = () => {
-    return userData?.addresses?.stx?.[0]?.address;
+    return userData?.addresses?.find(addr => addr.symbol === 'STX')?.address;
   };
 
   const handleWalletAction = () => {
