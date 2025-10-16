@@ -35,88 +35,87 @@ export function Layout() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-card">
       <nav className="border-b border-border backdrop-blur-sm bg-background/95 sticky top-0 z-50">
-        <div className="container mx-auto px-8 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-10">
+        <div className="container mx-auto px-4 sm:px-8 py-4">
+          <div className="flex items-center justify-between gap-2 sm:gap-4">
             <Link
               to="/"
-              className="flex items-center gap-3 group transition-all"
+              className="flex items-center gap-2 sm:gap-3 group transition-all shrink-0"
             >
               <img
                 src="/logo.png"
                 alt="StackCast Logo"
-                className="h-9 w-9 transition-transform group-hover:scale-110"
+                className="h-7 w-7 sm:h-9 sm:w-9 transition-transform group-hover:scale-110"
               />
-              <span className="text-2xl font-bold text-primary tracking-tight">
+              <span className="text-lg sm:text-2xl font-bold text-primary tracking-tight">
                 StackCast
               </span>
             </Link>
-            <div className="flex gap-2">
+
+            <div className="flex items-center gap-2">
+              {isConnected && getStxAddress() && (
+                <Badge
+                  variant="outline"
+                  className="hidden sm:flex text-xs font-mono px-3 py-1.5 rounded-lg border-primary/20 bg-primary/5 text-foreground"
+                >
+                  {getShortAddress(getStxAddress()!)}
+                </Badge>
+              )}
               <Button
-                variant={isActive("/") ? "default" : "ghost"}
-                asChild
-                className="rounded-xl font-medium transition-all hover:bg-primary/90"
+                onClick={handleWalletAction}
+                disabled={isLoading}
+                variant={isConnected ? "outline" : "default"}
+                className="rounded-xl font-bold px-3 sm:px-6 text-sm sm:text-base transition-all hover:bg-primary/90 shrink-0"
               >
-                <Link to="/">Markets</Link>
-              </Button>
-              <Button
-                variant={isActive("/portfolio") ? "default" : "ghost"}
-                asChild
-                className="rounded-xl font-medium transition-all hover:bg-primary/90"
-              >
-                <Link to="/portfolio">Portfolio</Link>
-              </Button>
-              <Button
-                variant={isActive("/redeem") ? "default" : "ghost"}
-                asChild
-                className="rounded-xl font-medium transition-all hover:bg-primary/90"
-              >
-                <Link to="/redeem">Redeem</Link>
-              </Button>
-              <Button
-                variant={isActive("/oracle") ? "default" : "ghost"}
-                asChild
-                className="rounded-xl font-medium transition-all hover:bg-primary/90"
-              >
-                <Link to="/oracle">Oracle</Link>
-              </Button>
-              <Button
-                variant={isActive("/voting") ? "default" : "ghost"}
-                asChild
-                className="rounded-xl font-medium transition-all hover:bg-primary/90"
-              >
-                <Link to="/voting">Voting</Link>
+                {isLoading
+                  ? "..."
+                  : isConnected
+                  ? "Disconnect"
+                  : "Connect"}
               </Button>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            {isConnected && getStxAddress() && (
-              <div className="flex items-center gap-2">
-                <Badge
-                  variant="outline"
-                  className="text-xs font-mono px-3 py-1.5 rounded-lg border-primary/20 bg-primary/5 text-foreground"
-                >
-                  {getShortAddress(getStxAddress()!)}
-                </Badge>
-              </div>
-            )}
+          <div className="flex gap-1 sm:gap-2 mt-3 overflow-x-auto scrollbar-hide pb-1">
             <Button
-              onClick={handleWalletAction}
-              disabled={isLoading}
-              variant={isConnected ? "outline" : "default"}
-              className="rounded-xl font-bold px-6 transition-all hover:bg-primary/90"
+              variant={isActive("/") ? "default" : "ghost"}
+              asChild
+              className="rounded-xl font-medium transition-all hover:bg-primary/90 text-xs sm:text-sm px-3 sm:px-4 shrink-0"
             >
-              {isLoading
-                ? "Connecting..."
-                : isConnected
-                ? "Disconnect"
-                : "Connect Wallet"}
+              <Link to="/">Markets</Link>
+            </Button>
+            <Button
+              variant={isActive("/portfolio") ? "default" : "ghost"}
+              asChild
+              className="rounded-xl font-medium transition-all hover:bg-primary/90 text-xs sm:text-sm px-3 sm:px-4 shrink-0"
+            >
+              <Link to="/portfolio">Portfolio</Link>
+            </Button>
+            <Button
+              variant={isActive("/redeem") ? "default" : "ghost"}
+              asChild
+              className="rounded-xl font-medium transition-all hover:bg-primary/90 text-xs sm:text-sm px-3 sm:px-4 shrink-0"
+            >
+              <Link to="/redeem">Redeem</Link>
+            </Button>
+            <Button
+              variant={isActive("/oracle") ? "default" : "ghost"}
+              asChild
+              className="rounded-xl font-medium transition-all hover:bg-primary/90 text-xs sm:text-sm px-3 sm:px-4 shrink-0"
+            >
+              <Link to="/oracle">Oracle</Link>
+            </Button>
+            <Button
+              variant={isActive("/voting") ? "default" : "ghost"}
+              asChild
+              className="rounded-xl font-medium transition-all hover:bg-primary/90 text-xs sm:text-sm px-3 sm:px-4 shrink-0"
+            >
+              <Link to="/voting">Voting</Link>
             </Button>
           </div>
         </div>
 
         {error && (
-          <div className="container mx-auto px-8 pb-3">
+          <div className="container mx-auto px-4 sm:px-8 pb-3">
             <div className="p-4 bg-destructive/10 border-2 border-destructive/20 rounded-2xl">
               <p className="text-destructive text-sm font-bold">
                 Wallet Error: {error}
@@ -126,7 +125,7 @@ export function Layout() {
         )}
       </nav>
 
-      <main className="container mx-auto px-8 py-10">
+      <main className="container mx-auto px-4 sm:px-8 py-6 sm:py-10">
         <Outlet />
       </main>
     </div>

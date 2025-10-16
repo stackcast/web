@@ -50,10 +50,10 @@ export function Markets() {
         description="Explore active prediction markets on Bitcoin. Trade on real-world events with transparent, decentralized markets powered by Stacks blockchain."
         url="https://stackcast.xyz/"
       />
-      <div className="space-y-8">
+      <div className="space-y-6 sm:space-y-8">
         <div className="space-y-2">
-          <h1 className="text-5xl font-bold tracking-tight text-foreground">Markets</h1>
-          <p className="text-muted-foreground text-lg">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-foreground">Markets</h1>
+          <p className="text-muted-foreground text-base sm:text-lg">
             Bitcoin-backed prediction markets resolved through the optimistic oracle.
         </p>
       </div>
@@ -65,13 +65,13 @@ export function Markets() {
           onChange={(event) => setSearchTerm(event.target.value)}
           className="md:max-w-sm rounded-xl h-11"
         />
-        <div className="flex gap-2">
+        <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
           {(Object.keys(statusLabels) as StatusFilter[]).map((filterKey) => (
             <Button
               key={filterKey}
               variant={statusFilter === filterKey ? 'default' : 'outline'}
               onClick={() => setStatusFilter(filterKey)}
-              className="rounded-xl font-medium"
+              className="rounded-xl font-medium text-xs sm:text-sm px-3 sm:px-4 shrink-0"
             >
               {statusLabels[filterKey]}
             </Button>

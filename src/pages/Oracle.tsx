@@ -50,10 +50,10 @@ export function Oracle() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       <div className="space-y-2">
-        <h1 className="text-5xl font-bold tracking-tight text-foreground">Oracle Console</h1>
-        <p className="text-muted-foreground text-lg">
+        <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-foreground">Oracle Console</h1>
+        <p className="text-muted-foreground text-base sm:text-lg">
           Monitor market queues, prepare optimistic oracle resolutions, and track recent settlements directly
           from the live matching engine APIs.
         </p>
@@ -86,58 +86,60 @@ export function Oracle() {
                 ? 'Loading markets…'
                 : `${activeMarkets.length} active • ${resolvedMarkets.length} resolved`}
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Select market</span>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full md:w-auto">
+              <span className="text-sm text-muted-foreground shrink-0">Select market</span>
               <select
-                className="rounded-md border bg-background px-3 py-2 text-sm"
+                className="rounded-md border bg-background px-3 py-2 text-sm w-full md:max-w-md"
                 value={selectedMarket?.marketId ?? ''}
                 onChange={handleSelectMarket}
               >
                 {markets.map((market) => (
                   <option key={market.marketId} value={market.marketId}>
-                    {market.marketId} – {market.question.slice(0, 40)}
-                    {market.question.length > 40 ? '…' : ''}
+                    {market.marketId.slice(0, 20)}... – {market.question.slice(0, 30)}
+                    {market.question.length > 30 ? '…' : ''}
                   </option>
                 ))}
               </select>
             </div>
           </div>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>ID</TableHead>
-                <TableHead>Question</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>YES</TableHead>
-                <TableHead>NO</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {markets.map((market) => (
-                <TableRow
-                  key={market.marketId}
-                  className={market.marketId === selectedMarket?.marketId ? 'bg-muted/50' : undefined}
-                >
-                  <TableCell className="text-xs font-mono">{market.marketId}</TableCell>
-                  <TableCell className="text-sm">{market.question}</TableCell>
-                  <TableCell>
-                    <Badge variant={market.resolved ? 'secondary' : 'default'}>
-                      {market.resolved ? 'Resolved' : 'Pending'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{market.yesPrice.toFixed(2)}¢</TableCell>
-                  <TableCell>{market.noPrice.toFixed(2)}¢</TableCell>
-                </TableRow>
-              ))}
-              {!markets.length && (
+          <div className="overflow-x-auto -mx-2 sm:mx-0">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
-                    No markets found. Use the markets page to create one.
-                  </TableCell>
+                  <TableHead className="min-w-[120px]">ID</TableHead>
+                  <TableHead className="min-w-[200px]">Question</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>YES</TableHead>
+                  <TableHead>NO</TableHead>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {markets.map((market) => (
+                  <TableRow
+                    key={market.marketId}
+                    className={market.marketId === selectedMarket?.marketId ? 'bg-muted/50' : undefined}
+                  >
+                    <TableCell className="text-xs font-mono">{market.marketId.slice(0, 15)}...</TableCell>
+                    <TableCell className="text-sm max-w-[300px] truncate">{market.question}</TableCell>
+                    <TableCell>
+                      <Badge variant={market.resolved ? 'secondary' : 'default'}>
+                        {market.resolved ? 'Resolved' : 'Pending'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{market.yesPrice.toFixed(2)}¢</TableCell>
+                    <TableCell>{market.noPrice.toFixed(2)}¢</TableCell>
+                  </TableRow>
+                ))}
+                {!markets.length && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
+                      No markets found. Use the markets page to create one.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 
