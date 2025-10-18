@@ -111,16 +111,22 @@ export function Markets() {
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="text-xs uppercase text-muted-foreground font-bold tracking-wider">YES</div>
-                    <div className="text-2xl font-bold text-primary">{market.yesPrice?.toFixed(2)}¢</div>
+                    <div className="text-2xl font-bold text-primary">
+                      {(((market.yesPrice ?? 0) / 1_000_000) * 100).toFixed(1)}%
+                    </div>
                   </div>
                   <div className="text-right">
                     <div className="text-xs uppercase text-muted-foreground font-bold tracking-wider">NO</div>
-                    <div className="text-2xl font-bold text-primary">{market.noPrice?.toFixed(2)}¢</div>
+                    <div className="text-2xl font-bold text-primary">
+                      {(((market.noPrice ?? 0) / 1_000_000) * 100).toFixed(1)}%
+                    </div>
                   </div>
                 </div>
                 <div className="text-sm text-muted-foreground flex items-center justify-between pt-2 border-t border-border">
                   <span>24h volume</span>
-                  <span className="font-bold text-foreground">{market.volume24h?.toFixed(2)} sBTC</span>
+                  <span className="font-bold text-foreground">
+                    {((market.volume24h ?? 0) / 1_000_000).toFixed(2)} sBTC
+                  </span>
                 </div>
               </CardContent>
             </Card>

@@ -1,12 +1,13 @@
 import { hexToBytes } from "@stacks/common";
 import {
   bufferCV,
+  cvToHex,
   cvToValue,
-  fetchCallReadOnlyFunction,
+  hexToCV,
   principalCV,
-  type ClarityValue,
 } from "@stacks/transactions";
-import { CONTRACT_ADDRESSES, stacksNetwork } from "../lib/config";
+import { apiRequest } from "@/api/client";
+import { CONTRACT_ADDRESSES } from "../lib/config";
 
 /**
  * Wait for Stacks transaction confirmation
@@ -20,24 +21,19 @@ export async function waitForTransactionConfirmation(
   txId: string,
   maxWaitMs: number = 120000
 ): Promise<{ success: boolean; status: string }> {
-  const apiUrl = stacksNetwork.client.baseUrl;
   const startTime = Date.now();
   const pollInterval = 2000; // Poll every 2 seconds
 
   while (Date.now() - startTime < maxWaitMs) {
     try {
-      const response = await fetch(`${apiUrl}/extended/v1/tx/${txId}`);
+      const tx = await apiRequest<{ tx_status: string }>(
+        `/api/stacks/tx/${txId}`
+      );
 
-      if (!response.ok) {
-        if (response.status === 404) {
-          // Transaction not yet in mempool/chain, wait and retry
-          await new Promise((resolve) => setTimeout(resolve, pollInterval));
-          continue;
-        }
-        throw new Error(`API error: ${response.status}`);
+      if (tx.tx_status === "not_found") {
+        await new Promise((resolve) => setTimeout(resolve, pollInterval));
+        continue;
       }
-
-      const tx = await response.json();
 
       // Check transaction status
       if (tx.tx_status === "success") {
@@ -81,18 +77,28 @@ export async function checkPositionBalance(
     const cleanPositionId = positionId.replace(/^0x/, "");
     const positionBuffer = hexToBytes(cleanPositionId);
 
-    const result = await fetchCallReadOnlyFunction({
+    const payload = {
       contractAddress,
       contractName,
       functionName: "balance-of",
-      functionArgs: [principalCV(userAddress), bufferCV(positionBuffer)],
-      network: stacksNetwork,
+      functionArgs: [
+        cvToHex(principalCV(userAddress)),
+        cvToHex(bufferCV(positionBuffer)),
+      ],
       senderAddress: userAddress,
-    });
+    };
 
-    // Convert Clarity uint to bigint
-    const balance = cvToValue(result as ClarityValue);
-    return BigInt(balance as string | number | bigint);
+    const { result } = await apiRequest<{ result: string }>(
+      "/api/stacks/read",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+
+    const clarityValue = hexToCV(result);
+    const balance = cvToValue(clarityValue);
+    return BigInt(balance as bigint | number | string);
   } catch (error) {
     console.error("Error checking position balance:", error);
     return 0n;
@@ -101,6 +107,10 @@ export async function checkPositionBalance(
 
 /**
  * Determine if user needs to split position before placing order
+ *
+ * IMPORTANT: BUY orders do NOT require position tokens!
+ * - BUY orders: User pays sBTC at execution time (when matched)
+ * - SELL orders: User must own the outcome tokens they're selling
  *
  * @param params.userAddress - User's Stacks principal address
  * @param params.side - Order side ("BUY" or "SELL")
@@ -117,25 +127,37 @@ export async function checkIfNeedsSplit(params: {
   size: number;
   yesPositionId: string;
   noPositionId: string;
+  requiredPositionId?: string;
 }): Promise<{
   needsSplit: boolean;
   requiredPositionId: string;
   currentBalance: bigint;
   requiredBalance: bigint;
 }> {
-  const { userAddress, side, outcome, size, yesPositionId, noPositionId } =
-    params;
+  const {
+    userAddress,
+    side,
+    outcome,
+    size,
+    yesPositionId,
+    noPositionId,
+    requiredPositionId: overridePositionId,
+  } = params;
 
-  // Determine which position ID user needs tokens for
-  let requiredPositionId: string;
-
+  // BUY orders do NOT require position tokens!
+  // Payment happens at execution time via sBTC transfer
   if (side === "BUY") {
-    // To BUY YES, user needs NO tokens (and vice versa)
-    requiredPositionId = outcome === "yes" ? noPositionId : yesPositionId;
-  } else {
-    // To SELL YES, user needs YES tokens (and vice versa)
-    requiredPositionId = outcome === "yes" ? yesPositionId : noPositionId;
+    return {
+      needsSplit: false,
+      requiredPositionId: "", // Not applicable for BUY orders
+      currentBalance: 0n,
+      requiredBalance: 0n,
+    };
   }
+
+  // SELL orders: User must own the outcome tokens they're selling
+  const requiredPositionId =
+    overridePositionId ?? (outcome === "yes" ? yesPositionId : noPositionId);
 
   // Check user's current balance
   const currentBalance = await checkPositionBalance(
@@ -191,3 +213,7 @@ export async function checkMergeablePairs(params: {
     noBalance,
   };
 }
+
+/**
+ * Check if the conditional tokens contract has operator approval granted to the exchange contract.
+ */

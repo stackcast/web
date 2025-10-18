@@ -52,6 +52,15 @@ import { Link, useParams } from "react-router-dom";
 
 type Outcome = "yes" | "no";
 
+type OrderRequirements = {
+  marketId: string;
+  conditionId: string;
+  requiredPositionId: string;
+  makerPositionId: string;
+  takerPositionId: string;
+  requiredAmount: number;
+};
+
 const formatSats = (value?: number) =>
   typeof value === "number" ? `${(value / 1_000_000).toFixed(4)} sBTC` : "—";
 
@@ -115,6 +124,8 @@ export function MarketDetail() {
     () =>
       combinedOrderbook
         ? {
+            // Complementary orders are now stored in the matching engine
+            // No need to invert - they exist as real orders
             bids: withCumulativeTotals(combinedOrderbook.yes.bids),
             asks: withCumulativeTotals(combinedOrderbook.yes.asks),
           }
@@ -126,6 +137,8 @@ export function MarketDetail() {
     () =>
       combinedOrderbook
         ? {
+            // Complementary orders are now stored in the matching engine
+            // No need to invert - they exist as real orders
             bids: withCumulativeTotals(combinedOrderbook.no.bids),
             asks: withCumulativeTotals(combinedOrderbook.no.asks),
           }
@@ -292,79 +305,106 @@ export function MarketDetail() {
       setErrorMessage(undefined);
       setIsProcessing(true);
 
-      // Check if user needs to split position (both BUY and SELL)
-      const balanceCheck = await checkIfNeedsSplit({
-        userAddress: maker,
-        side,
-        outcome,
-        size: numericSize,
-        yesPositionId: market.yesPositionId,
-        noPositionId: market.noPositionId,
+      // Fetch canonical position mapping from backend to avoid divergence
+      const requirementsResponse = await apiRequest<{
+        success: boolean;
+        requirements: OrderRequirements;
+      }>("/api/smart-orders/requirements", {
+        method: "POST",
+        body: JSON.stringify({
+          maker,
+          marketId,
+          side,
+          outcome,
+          size: numericSize,
+        }),
       });
 
-      if (balanceCheck.needsSplit) {
-        const shortfall =
-          (Number(balanceCheck.requiredBalance) -
-            Number(balanceCheck.currentBalance)) /
-          1_000_000;
-        const action =
-          side === "BUY"
-            ? `buy ${outcome.toUpperCase()}`
-            : `sell ${outcome.toUpperCase()}`;
+      if (!requirementsResponse.success) {
+        throw new Error("Failed to load order requirements");
+      }
 
-        const shouldSplit = window.confirm(
-          `💳 Deposit Required\n\n` +
-            `To ${action}, you need to deposit ${shortfall.toFixed(
-              2
-            )} sBTC.\n\n` +
-            `This will be converted to outcome tokens (YES+NO pairs).\n` +
-            `You can merge them back to sBTC anytime.\n\n` +
-            `Proceed with deposit?`
-        );
+      const {
+        makerPositionId,
+        takerPositionId,
+        requiredPositionId,
+      } = requirementsResponse.requirements;
 
-        if (!shouldSplit) {
-          setErrorMessage("Order cancelled - deposit required");
-          setIsProcessing(false);
-          return;
-        }
+      // Only SELL orders require position token balance check
+      // BUY orders pay sBTC at execution time (when matched)
+      if (side === "SELL") {
+        const balanceCheck = await checkIfNeedsSplit({
+          userAddress: maker,
+          side,
+          outcome,
+          size: numericSize,
+          yesPositionId: market.yesPositionId,
+          noPositionId: market.noPositionId,
+          requiredPositionId,
+        });
 
-        const splitAmount = shortfall;
-        const splitResult = await splitPosition(splitAmount);
+        if (balanceCheck.needsSplit) {
+          const shortfall =
+            (Number(balanceCheck.requiredBalance) -
+              Number(balanceCheck.currentBalance)) /
+            1_000_000;
 
-        if (!splitResult.success) {
-          setErrorMessage("Deposit cancelled");
-          setIsProcessing(false);
-          return;
-        }
-
-        if (splitResult.txId) {
-          setSuccessMessage(
-            `⏳ Waiting for deposit confirmation (${splitResult.txId.slice(
-              0,
-              8
-            )}...)...`
+          const shouldSplit = window.confirm(
+            `💳 Deposit Required to Sell\n\n` +
+              `You need ${shortfall.toFixed(
+                2
+              )} more ${outcome.toUpperCase()} tokens to sell.\n\n` +
+              `Deposit ${shortfall.toFixed(
+                2
+              )} sBTC to mint YES+NO pairs?\n` +
+              `(You can merge unused tokens back to sBTC anytime)\n\n` +
+              `Proceed with deposit?`
           );
 
-          try {
-            const confirmation = await waitForTransactionConfirmation(
-              splitResult.txId
+          if (!shouldSplit) {
+            setErrorMessage("Order cancelled - insufficient balance to sell");
+            setIsProcessing(false);
+            return;
+          }
+
+          const splitAmount = shortfall;
+          const splitResult = await splitPosition(splitAmount);
+
+          if (!splitResult.success) {
+            setErrorMessage("Deposit cancelled");
+            setIsProcessing(false);
+            return;
+          }
+
+          if (splitResult.txId) {
+            setSuccessMessage(
+              `⏳ Waiting for deposit confirmation (${splitResult.txId.slice(
+                0,
+                8
+              )}...)...`
             );
 
-            if (confirmation.success) {
-              setSuccessMessage(
-                `✅ Deposit confirmed! Now placing your order...`
+            try {
+              const confirmation = await waitForTransactionConfirmation(
+                splitResult.txId
               );
-            } else {
-              setErrorMessage(`❌ Deposit failed: ${confirmation.status}`);
+
+              if (confirmation.success) {
+                setSuccessMessage(
+                  `✅ Deposit confirmed! Now placing your sell order...`
+                );
+              } else {
+                setErrorMessage(`❌ Deposit failed: ${confirmation.status}`);
+                setIsProcessing(false);
+                return;
+              }
+            } catch (error) {
+              setErrorMessage(
+                `⏱️ Deposit timeout - please check blockchain and try again`
+              );
               setIsProcessing(false);
               return;
             }
-          } catch (error) {
-            setErrorMessage(
-              `⏱️ Deposit timeout - please check blockchain and try again`
-            );
-            setIsProcessing(false);
-            return;
           }
         }
       }
@@ -372,28 +412,6 @@ export function MarketDetail() {
       // Generate order parameters
       const salt = generateSalt();
       const expiration = calculateExpiration(1); // 1 hour from now
-
-      // Determine position IDs based on side and outcome (MUST match backend logic)
-      // BUY YES: maker gives NO tokens (makerPositionId), gets YES tokens (takerPositionId)
-      // BUY NO: maker gives YES tokens (makerPositionId), gets NO tokens (takerPositionId)
-      // SELL YES: maker gives YES tokens (makerPositionId), gets NO tokens (takerPositionId)
-      // SELL NO: maker gives NO tokens (makerPositionId), gets YES tokens (takerPositionId)
-      let makerPositionId: string;
-      let takerPositionId: string;
-
-      if (side === "BUY") {
-        // When buying, maker gives the opposite outcome token
-        makerPositionId =
-          outcome === "yes" ? market.noPositionId : market.yesPositionId;
-        takerPositionId =
-          outcome === "yes" ? market.yesPositionId : market.noPositionId;
-      } else {
-        // When selling, maker gives the outcome token they're selling
-        makerPositionId =
-          outcome === "yes" ? market.yesPositionId : market.noPositionId;
-        takerPositionId =
-          outcome === "yes" ? market.noPositionId : market.yesPositionId;
-      }
 
       // Calculate amounts (in micro-sats for proper integer handling)
       const makerAmount = numericSize; // Number of tokens maker gives
@@ -411,7 +429,6 @@ export function MarketDetail() {
 
       const signHash = await computeOrderHash(
         maker,
-        maker, // taker = maker for limit orders
         makerPositionId,
         takerPositionId,
         makerAmount,

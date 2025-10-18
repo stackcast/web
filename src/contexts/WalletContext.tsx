@@ -5,13 +5,11 @@ import {
   isConnected,
   request,
 } from "@stacks/connect";
-import {
-  fetchCallReadOnlyFunction,
-  type ClarityValue,
-} from "@stacks/transactions";
+import { cvToHex, hexToCV, type ClarityValue } from "@stacks/transactions";
 import type { ReactNode } from "react";
 import React, { createContext, useContext, useMemo, useState } from "react";
-import { networkIdentifier, stacksNetwork } from "../lib/config";
+import { networkIdentifier } from "../lib/config";
+import { apiRequest } from "@/api/client";
 
 // Declare Leather provider type for window
 declare global {
@@ -212,17 +210,26 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     setError(null);
 
     try {
-      const result = await fetchCallReadOnlyFunction({
+      const payload = {
         contractAddress,
         contractName,
         functionName,
-        functionArgs,
-        network: stacksNetwork,
-        senderAddress: contractAddress, // Use contract address as sender for read-only calls
-      });
+        functionArgs: functionArgs.map((arg) => cvToHex(arg)),
+        senderAddress: contractAddress,
+      };
 
-      console.log("Read contract result:", result);
-      return result;
+      const { result } = await apiRequest<{ result: string }>(
+        "/api/stacks/read",
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        }
+      );
+
+      const clarityValue = hexToCV(result);
+
+      console.log("Read contract result:", clarityValue);
+      return clarityValue;
     } catch (err) {
       console.error("Read contract error:", err);
       const errorMessage =

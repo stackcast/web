@@ -53,7 +53,7 @@ export function usePlaceSmartOrder() {
             if (!previous?.orderbooks) return previous
 
             const outcome = order.outcome === 'yes' ? 'yes' : 'no'
-            const bookKey = determineOrderbookKey(order.side, outcome)
+            const bookKey = determineOrderbookKey(outcome)
             const currentBook = previous.orderbooks[bookKey]
             if (!currentBook) return previous
 
@@ -117,12 +117,8 @@ export function useCancelOrder() {
 
 type OrderbookKey = 'yes' | 'no'
 
-function determineOrderbookKey(side: OrderSide, outcome: 'yes' | 'no'): OrderbookKey {
-  const routesToNoBook =
-    (side === 'BUY' && outcome === 'yes') ||
-    (side === 'SELL' && outcome === 'no')
-
-  return routesToNoBook ? 'no' : 'yes'
+function determineOrderbookKey(outcome: 'yes' | 'no'): OrderbookKey {
+  return outcome
 }
 
 function upsertOrderbookLevel(

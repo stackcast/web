@@ -8,14 +8,13 @@ import {
 /**
  * Compute order hash matching backend/contract implementation
  *
- * Contract implementation (ctf-exchange.clar:46-78):
+ * Contract implementation (ctf-exchange.clar:46-74):
  * (sha256 (concat
- *   maker + taker + maker-position-id + taker-position-id +
+ *   maker + maker-position-id + taker-position-id +
  *   maker-amount + taker-amount + salt + expiration))
  */
 export async function computeOrderHash(
   maker: string,
-  taker: string,
   makerPositionId: string,
   takerPositionId: string,
   makerAmount: number,
@@ -31,7 +30,6 @@ export async function computeOrderHash(
   // Serialize each field to Clarity consensus buffers (as Uint8Array)
   // Using serializeCVBytes which returns Uint8Array directly
   const makerBuff = serializeCVBytes(standardPrincipalCV(maker));
-  const takerBuff = serializeCVBytes(standardPrincipalCV(taker));
 
   // Position IDs should be 32-byte hex strings (64 hex chars)
   const makerPositionIdBuff = hexToBytes(makerPositionId);
@@ -58,7 +56,6 @@ export async function computeOrderHash(
   // Concatenate all buffers in the exact order as the contract
   const concatenated = new Uint8Array(
     makerBuff.length +
-      takerBuff.length +
       makerPositionIdBuff.length +
       takerPositionIdBuff.length +
       makerAmountBuff.length +
@@ -70,8 +67,6 @@ export async function computeOrderHash(
   let offset = 0;
   concatenated.set(makerBuff, offset);
   offset += makerBuff.length;
-  concatenated.set(takerBuff, offset);
-  offset += takerBuff.length;
   concatenated.set(makerPositionIdBuff, offset);
   offset += makerPositionIdBuff.length;
   concatenated.set(takerPositionIdBuff, offset);
@@ -108,7 +103,6 @@ function hexToBytes(hex: string): Uint8Array {
  */
 export async function signOrder(
   maker: string,
-  taker: string,
   makerPositionId: string,
   takerPositionId: string,
   makerAmount: number,
@@ -118,14 +112,13 @@ export async function signOrder(
 ): Promise<string> {
   return new Promise(async (resolve, reject) => {
     // Compute order hash
-    const orderHash = await computeOrderHash(
-      maker,
-      taker,
-      makerPositionId,
-      takerPositionId,
-      makerAmount,
-      takerAmount,
-      salt,
+  const orderHash = await computeOrderHash(
+    maker,
+    makerPositionId,
+    takerPositionId,
+    makerAmount,
+    takerAmount,
+    salt,
       expiration
     );
 
