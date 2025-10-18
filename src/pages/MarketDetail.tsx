@@ -42,6 +42,7 @@ import {
 import {
   checkIfNeedsSplit,
   checkPositionBalance,
+  getCollateralBalance,
   waitForTransactionConfirmation,
 } from "@/utils/stacksHelpers";
 import { hexToBytes } from "@stacks/common";
@@ -89,9 +90,10 @@ export function MarketDetail() {
 
   // Don't use local state for maker - derive it directly from wallet
   // Find the STX address from the addresses array
-  const maker = isConnected && userData?.addresses
-    ? userData.addresses.find(addr => addr.symbol === 'STX')?.address || ""
-    : "";
+  const maker =
+    isConnected && userData?.addresses
+      ? userData.addresses.find((addr) => addr.symbol === "STX")?.address || ""
+      : "";
 
   const [side, setSide] = useState<OrderSide>("BUY");
   const [outcome, setOutcome] = useState<Outcome>("yes");
@@ -104,6 +106,7 @@ export function MarketDetail() {
   const [errorMessage, setErrorMessage] = useState<string>();
   const [successMessage, setSuccessMessage] = useState<string>();
   const [isProcessing, setIsProcessing] = useState(false);
+  const [collateralBalance, setCollateralBalance] = useState<bigint>(0n);
 
   // Fetch market data with TanStack Query
   const {
@@ -270,6 +273,31 @@ export function MarketDetail() {
     return () => clearTimeout(debounce);
   }, [market, marketId, outcome, side, orderType, size, price, maxSlippage]);
 
+  useEffect(() => {
+    if (!isConnected || !maker) {
+      setCollateralBalance(0n);
+      return;
+    }
+
+    let cancelled = false;
+    const fetchCollateral = async () => {
+      try {
+        const balance = await getCollateralBalance(maker);
+        if (!cancelled) {
+          setCollateralBalance(balance);
+        }
+      } catch (error) {
+        console.error("Collateral balance fetch error:", error);
+      }
+    };
+
+    void fetchCollateral();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isConnected, maker]);
+
   const onSubmitOrder = async (event: FormEvent) => {
     event.preventDefault();
     if (!market) return;
@@ -305,6 +333,69 @@ export function MarketDetail() {
       setErrorMessage(undefined);
       setIsProcessing(true);
 
+      if (side === "BUY") {
+        const priceScale = 1_000_000n;
+        const feeBps = 50n;
+        const feeDenominator = 10_000n;
+        const sizeBig = BigInt(numericSize);
+
+        let priceBig: bigint;
+        if (orderType === "LIMIT" && typeof numericPrice === "number") {
+          priceBig = BigInt(numericPrice);
+        } else if (executionPreview?.averagePrice) {
+          priceBig = BigInt(Math.floor(executionPreview.averagePrice));
+        } else {
+          throw new Error(
+            "Unable to determine price for collateral calculation"
+          );
+        }
+
+        const paymentEstimate = (priceBig * sizeBig) / priceScale;
+        const feeShare = (sizeBig * feeBps) / feeDenominator;
+        const collateralNeeded = paymentEstimate + feeShare;
+
+        if (collateralBalance < collateralNeeded) {
+          const deficit = collateralNeeded - collateralBalance;
+          const deficitSbtc = Number(deficit) / 1_000_000;
+          const confirmDeposit = window.confirm(
+            `You need to deposit ${deficitSbtc.toFixed(
+              6
+            )} sBTC of collateral before placing this BUY order. Proceed?`
+          );
+
+          if (!confirmDeposit) {
+            setIsProcessing(false);
+            setErrorMessage("Collateral deposit required to place BUY order.");
+            return;
+          }
+
+          const [exchangeAddress, exchangeName] =
+            CONTRACT_ADDRESSES.CTF_EXCHANGE.split(".");
+          const depositResponse = await callContract(
+            exchangeAddress,
+            exchangeName,
+            "deposit-collateral",
+            [uintCV(deficit)]
+          );
+
+          setSuccessMessage(
+            `⏳ Depositing ${deficitSbtc.toFixed(
+              6
+            )} sBTC collateral (${depositResponse.txid.slice(0, 8)}...)`
+          );
+
+          await waitForTransactionConfirmation(depositResponse.txid);
+          const refreshed = await getCollateralBalance(maker);
+          setCollateralBalance(refreshed);
+
+          if (refreshed < collateralNeeded) {
+            throw new Error(
+              "Collateral deposit did not settle with sufficient balance"
+            );
+          }
+        }
+      }
+
       // Fetch canonical position mapping from backend to avoid divergence
       const requirementsResponse = await apiRequest<{
         success: boolean;
@@ -324,11 +415,8 @@ export function MarketDetail() {
         throw new Error("Failed to load order requirements");
       }
 
-      const {
-        makerPositionId,
-        takerPositionId,
-        requiredPositionId,
-      } = requirementsResponse.requirements;
+      const { makerPositionId, takerPositionId, requiredPositionId } =
+        requirementsResponse.requirements;
 
       // Only SELL orders require position token balance check
       // BUY orders pay sBTC at execution time (when matched)
@@ -354,9 +442,7 @@ export function MarketDetail() {
               `You need ${shortfall.toFixed(
                 2
               )} more ${outcome.toUpperCase()} tokens to sell.\n\n` +
-              `Deposit ${shortfall.toFixed(
-                2
-              )} sBTC to mint YES+NO pairs?\n` +
+              `Deposit ${shortfall.toFixed(2)} sBTC to mint YES+NO pairs?\n` +
               `(You can merge unused tokens back to sBTC anytime)\n\n` +
               `Proceed with deposit?`
           );
@@ -422,7 +508,9 @@ export function MarketDetail() {
       } else {
         // MARKET orders MUST have execution preview
         if (!executionPreview) {
-          throw new Error("Cannot execute market order without execution preview");
+          throw new Error(
+            "Cannot execute market order without execution preview"
+          );
         }
         takerAmount = Math.floor(executionPreview.averagePrice * numericSize);
       }
@@ -589,7 +677,9 @@ export function MarketDetail() {
         </Link>
         <Card className="border-2 border-destructive rounded-2xl">
           <CardHeader>
-            <CardTitle className="text-destructive font-bold">Market not found</CardTitle>
+            <CardTitle className="text-destructive font-bold">
+              Market not found
+            </CardTitle>
             <CardDescription>
               {marketError?.message ?? "Unknown error"}
             </CardDescription>
@@ -603,10 +693,23 @@ export function MarketDetail() {
     <>
       <SEO
         title={market.question}
-        description={`Trade on: ${market.question}. Current YES price: ${formatPrice(market.yesPrice)}, NO price: ${formatPrice(market.noPrice)}. ${market.resolved ? 'Market resolved' : 'Market active'}.`}
+        description={`Trade on: ${
+          market.question
+        }. Current YES price: ${formatPrice(
+          market.yesPrice
+        )}, NO price: ${formatPrice(market.noPrice)}. ${
+          market.resolved ? "Market resolved" : "Market active"
+        }.`}
         url={`https://stackcast.xyz/markets/${market.marketId}`}
         type="article"
-        keywords={['prediction market', market.question, 'bitcoin', 'stacks', 'trading', market.resolved ? 'resolved' : 'active']}
+        keywords={[
+          "prediction market",
+          market.question,
+          "bitcoin",
+          "stacks",
+          "trading",
+          market.resolved ? "resolved" : "active",
+        ]}
       />
       <div className="space-y-6">
         <div className="flex items-center gap-2 text-sm text-muted-foreground font-medium">
@@ -617,392 +720,413 @@ export function MarketDetail() {
           <span className="font-bold text-foreground">{market.marketId}</span>
         </div>
 
-      <Card className="border-2 border-primary rounded-2xl bg-primary shadow-2xl shadow-primary/20 p-8">
-        <CardHeader className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0">
-            <div className="flex items-center gap-3 flex-wrap">
-              <Badge
-                variant={market.resolved ? "secondary" : "default"}
-                className="shrink-0 bg-black/10 border-black/20 text-black"
-              >
-                {market.resolved ? "Resolved" : "Active"}
-              </Badge>
-              <span className="text-xs text-black/70 font-medium">
-                Created {formatTimestamp(market.createdAt)}
-              </span>
-            </div>
-            <CardTitle className="text-2xl lg:text-3xl mt-2 break-words text-black font-bold">
-              {market.question}
-            </CardTitle>
-            <CardDescription className="mt-1 break-all text-black/70 font-medium">
-              Condition ID: {market.conditionId}
-            </CardDescription>
-          </div>
-          <div className="flex gap-6 text-sm">
-            <div className="bg-black/10 rounded-xl p-4 border-2 border-black/20">
-              <div className="text-black/70 uppercase tracking-wide font-bold text-xs">
-                YES
+        <Card className="border-2 border-primary rounded-2xl bg-primary shadow-2xl shadow-primary/20 p-8">
+          <CardHeader className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex items-center gap-3 flex-wrap">
+                <Badge
+                  variant={market.resolved ? "secondary" : "default"}
+                  className="shrink-0 bg-black/10 border-black/20 text-black"
+                >
+                  {market.resolved ? "Resolved" : "Active"}
+                </Badge>
+                <span className="text-xs text-black/70 font-medium">
+                  Created {formatTimestamp(market.createdAt)}
+                </span>
               </div>
-              <div className="text-2xl font-bold text-black">
-                {formatPrice(market.yesPrice)}
-              </div>
-            </div>
-            <div className="bg-black/10 rounded-xl p-4 border-2 border-black/20">
-              <div className="text-black/70 uppercase tracking-wide font-bold text-xs">
-                NO
-              </div>
-              <div className="text-2xl font-bold text-black">
-                {formatPrice(market.noPrice)}
-              </div>
-            </div>
-            <div className="bg-black/10 rounded-xl p-4 border-2 border-black/20">
-              <div className="text-black/70 uppercase tracking-wide font-bold text-xs">
-                Volume 24h
-              </div>
-              <div className="text-2xl font-bold text-black">
-                {formatSats(market.volume24h)}
-              </div>
-            </div>
-          </div>
-        </CardHeader>
-      </Card>
-
-      <PriceChart
-        marketId={market.marketId}
-        currentYesPrice={market.yesPrice}
-        currentNoPrice={market.noPrice}
-      />
-
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Order book</CardTitle>
-              <CardDescription>
-                Live levels refreshed automatically.
+              <CardTitle className="text-2xl lg:text-3xl mt-2 break-words text-black font-bold">
+                {market.question}
+              </CardTitle>
+              <CardDescription className="mt-1 break-all text-black/70 font-medium">
+                Condition ID: {market.conditionId}
               </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Tabs defaultValue="yes">
-                <TabsList className="grid grid-cols-2">
-                  <TabsTrigger value="yes">YES</TabsTrigger>
-                  <TabsTrigger value="no">NO</TabsTrigger>
-                </TabsList>
-                <TabsContent value="yes" className="space-y-4 pt-4">
-                  <OrderbookTable
-                    bids={yesOrderbook?.bids}
-                    asks={yesOrderbook?.asks}
-                    emptyLabel="No orders for YES yet."
-                  />
-                </TabsContent>
-                <TabsContent value="no" className="space-y-4 pt-4">
-                  <OrderbookTable
-                    bids={noOrderbook?.bids}
-                    asks={noOrderbook?.asks}
-                    emptyLabel="No orders for NO yet."
-                  />
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
+            </div>
+            <div className="flex gap-6 text-sm">
+              <div className="bg-black/10 rounded-xl p-4 border-2 border-black/20">
+                <div className="text-black/70 uppercase tracking-wide font-bold text-xs">
+                  YES
+                </div>
+                <div className="text-2xl font-bold text-black">
+                  {formatPrice(market.yesPrice)}
+                </div>
+              </div>
+              <div className="bg-black/10 rounded-xl p-4 border-2 border-black/20">
+                <div className="text-black/70 uppercase tracking-wide font-bold text-xs">
+                  NO
+                </div>
+                <div className="text-2xl font-bold text-black">
+                  {formatPrice(market.noPrice)}
+                </div>
+              </div>
+              <div className="bg-black/10 rounded-xl p-4 border-2 border-black/20">
+                <div className="text-black/70 uppercase tracking-wide font-bold text-xs">
+                  Volume 24h
+                </div>
+                <div className="text-2xl font-bold text-black">
+                  {formatSats(market.volume24h)}
+                </div>
+              </div>
+            </div>
+          </CardHeader>
+        </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent trades</CardTitle>
-              <CardDescription>
-                Executed matches from the matching engine.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[80px]">Side</TableHead>
-                    <TableHead>Price</TableHead>
-                    <TableHead>Size</TableHead>
-                    <TableHead>Time</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {trades.length ? (
-                    trades.map((trade: Trade) => (
-                      <TableRow key={trade.tradeId}>
-                        <TableCell className="font-medium">
-                          {trade.side}
-                        </TableCell>
-                        <TableCell>{formatPrice(trade.price)}</TableCell>
-                        <TableCell>{trade.size}</TableCell>
-                        <TableCell>
-                          {formatTimestamp(trade.timestamp)}
+        <PriceChart
+          marketId={market.marketId}
+          currentYesPrice={market.yesPrice}
+          currentNoPrice={market.noPrice}
+        />
+
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="space-y-6 lg:col-span-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Order book</CardTitle>
+                <CardDescription>
+                  Live levels refreshed automatically.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Tabs defaultValue="yes">
+                  <TabsList className="grid grid-cols-2">
+                    <TabsTrigger value="yes">YES</TabsTrigger>
+                    <TabsTrigger value="no">NO</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="yes" className="space-y-4 pt-4">
+                    <OrderbookTable
+                      bids={yesOrderbook?.bids}
+                      asks={yesOrderbook?.asks}
+                      emptyLabel="No orders for YES yet."
+                    />
+                  </TabsContent>
+                  <TabsContent value="no" className="space-y-4 pt-4">
+                    <OrderbookTable
+                      bids={noOrderbook?.bids}
+                      asks={noOrderbook?.asks}
+                      emptyLabel="No orders for NO yet."
+                    />
+                  </TabsContent>
+                </Tabs>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Recent trades</CardTitle>
+                <CardDescription>
+                  Executed matches from the matching engine.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[80px]">Side</TableHead>
+                      <TableHead>Price</TableHead>
+                      <TableHead>Size</TableHead>
+                      <TableHead>Time</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {trades.length ? (
+                      trades.map((trade: Trade) => (
+                        <TableRow key={trade.tradeId}>
+                          <TableCell className="font-medium">
+                            {trade.side}
+                          </TableCell>
+                          <TableCell>{formatPrice(trade.price)}</TableCell>
+                          <TableCell>{trade.size}</TableCell>
+                          <TableCell>
+                            {formatTimestamp(trade.timestamp)}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell
+                          colSpan={4}
+                          className="text-center text-muted-foreground"
+                        >
+                          No trades yet.
                         </TableCell>
                       </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell
-                        colSpan={4}
-                        className="text-center text-muted-foreground"
-                      >
-                        No trades yet.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </div>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
 
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Place order</CardTitle>
-              <CardDescription>
-                Submit to the matching engine using live pricing.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form className="space-y-4" onSubmit={onSubmitOrder}>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Maker address</label>
-                  <Input
-                    key={maker || 'empty'}
-                    placeholder="Connect wallet to auto-fill"
-                    value={maker}
-                    readOnly
-                    disabled={!isConnected}
-                    required
-                  />
-                  {!isConnected && (
-                    <p className="text-xs text-muted-foreground">
-                      Connect your wallet to place signed orders
-                    </p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Outcome</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {(Object.keys(outcomeLabels) as Outcome[]).map((value) => (
-                      <Button
-                        key={value}
-                        type="button"
-                        variant={outcome === value ? "default" : "outline"}
-                        onClick={() => setOutcome(value)}
-                      >
-                        {outcomeLabels[value]}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Side</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {(["BUY", "SELL"] as OrderSide[]).map((value) => (
-                      <Button
-                        key={value}
-                        type="button"
-                        variant={side === value ? "default" : "outline"}
-                        onClick={() => setSide(value)}
-                      >
-                        {value}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Order Type</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {(["LIMIT", "MARKET"] as OrderType[]).map((value) => (
-                      <Button
-                        key={value}
-                        type="button"
-                        variant={orderType === value ? "default" : "outline"}
-                        onClick={() => setOrderType(value)}
-                      >
-                        {value}
-                      </Button>
-                    ))}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {orderType === "LIMIT"
-                      ? "Place order at specific price"
-                      : "Execute immediately at best available prices"}
-                  </p>
-                </div>
-                {orderType === "LIMIT" && (
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Place order</CardTitle>
+                <CardDescription>
+                  Submit to the matching engine using live pricing.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form className="space-y-4" onSubmit={onSubmitOrder}>
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">
-                      Price (sBTC per token)
-                    </label>
+                    <label className="text-sm font-medium">Maker address</label>
+                    <Input
+                      key={maker || "empty"}
+                      placeholder="Connect wallet to auto-fill"
+                      value={maker}
+                      readOnly
+                      disabled={!isConnected}
+                      required
+                    />
+                    {!isConnected && (
+                      <p className="text-xs text-muted-foreground">
+                        Connect your wallet to place signed orders
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Outcome</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {(Object.keys(outcomeLabels) as Outcome[]).map(
+                        (value) => (
+                          <Button
+                            key={value}
+                            type="button"
+                            variant={outcome === value ? "default" : "outline"}
+                            onClick={() => setOutcome(value)}
+                          >
+                            {outcomeLabels[value]}
+                          </Button>
+                        )
+                      )}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Side</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {(["BUY", "SELL"] as OrderSide[]).map((value) => (
+                        <Button
+                          key={value}
+                          type="button"
+                          variant={side === value ? "default" : "outline"}
+                          onClick={() => setSide(value)}
+                        >
+                          {value}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Order Type</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {(["LIMIT", "MARKET"] as OrderType[]).map((value) => (
+                        <Button
+                          key={value}
+                          type="button"
+                          variant={orderType === value ? "default" : "outline"}
+                          onClick={() => setOrderType(value)}
+                        >
+                          {value}
+                        </Button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {orderType === "LIMIT"
+                        ? "Place order at specific price"
+                        : "Execute immediately at best available prices"}
+                    </p>
+                  </div>
+                  {orderType === "LIMIT" && (
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">
+                        Price (sBTC per token)
+                      </label>
+                      <Input
+                        type="number"
+                        step="any"
+                        min="0.01"
+                        value={price}
+                        onChange={(event) => setPrice(event.target.value)}
+                        required
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Price in sBTC for each outcome token
+                      </p>
+                    </div>
+                  )}
+                  {orderType === "MARKET" && (
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">
+                        Max Slippage (%)
+                      </label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="100"
+                        value={maxSlippage}
+                        onChange={(event) => setMaxSlippage(event.target.value)}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Maximum acceptable price slippage (default: 5%)
+                      </p>
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Size (tokens)</label>
                     <Input
                       type="number"
-                      step="any"
-                      min="0.01"
-                      value={price}
-                      onChange={(event) => setPrice(event.target.value)}
+                      step="1"
+                      min="1"
+                      value={size}
+                      onChange={(event) => setSize(event.target.value)}
                       required
                     />
                     <p className="text-xs text-muted-foreground">
-                      Price in sBTC for each outcome token
+                      Number of outcome tokens to trade
                     </p>
                   </div>
-                )}
-                {orderType === "MARKET" && (
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">
-                      Max Slippage (%)
-                    </label>
-                    <Input
-                      type="number"
-                      step="0.1"
-                      min="0"
-                      max="100"
-                      value={maxSlippage}
-                      onChange={(event) => setMaxSlippage(event.target.value)}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Maximum acceptable price slippage (default: 5%)
-                    </p>
-                  </div>
-                )}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Size (tokens)</label>
-                  <Input
-                    type="number"
-                    step="1"
-                    min="1"
-                    value={size}
-                    onChange={(event) => setSize(event.target.value)}
-                    required
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Number of outcome tokens to trade
-                  </p>
-                </div>
 
-                {executionPreview && executionPreview.feasible && (
-                  <div className="rounded-xl bg-black/10 border-2 border-black/20 p-4 space-y-2 text-sm">
-                    <div className="font-bold text-foreground">Execution Preview</div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground font-medium">Avg Price:</span>
-                      <span className="font-bold">{formatPrice(executionPreview.averagePrice)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground font-medium">Total Cost:</span>
-                      <span className="font-bold">{formatSats(executionPreview.totalCost)}</span>
-                    </div>
-                    {orderType === "MARKET" && (
-                      <>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground font-medium">
-                            Slippage:
-                          </span>
-                          <span
-                            className={
-                              executionPreview.slippage > 2
-                                ? "text-primary font-bold"
-                                : "font-bold"
-                            }
-                          >
-                            {executionPreview.slippage.toFixed(2)}%
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground font-medium">Levels:</span>
-                          <span className="font-bold">{executionPreview.levels.length}</span>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
-
-                {executionPreview &&
-                  !executionPreview.feasible &&
-                  orderType === "MARKET" && (
-                    <div className="rounded-xl bg-destructive/10 border-2 border-destructive/20 p-4 text-sm text-destructive font-bold">
-                      {executionPreview.reason || "Cannot execute market order"}
-                    </div>
-                  )}
-
-                {executionPreview &&
-                  !executionPreview.feasible &&
-                  orderType === "LIMIT" && (
-                    <div className="rounded-xl bg-primary/10 border-2 border-primary/20 p-4 text-sm">
-                      <div className="text-primary font-bold">
-                        No {side === "BUY" ? "sellers" : "buyers"}? Your LIMIT
-                        order will provide liquidity until someone matches.
+                  {executionPreview && executionPreview.feasible && (
+                    <div className="rounded-xl bg-black/10 border-2 border-black/20 p-4 space-y-2 text-sm">
+                      <div className="font-bold text-foreground">
+                        Execution Preview
                       </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground font-medium">
+                          Avg Price:
+                        </span>
+                        <span className="font-bold">
+                          {formatPrice(executionPreview.averagePrice)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground font-medium">
+                          Total Cost:
+                        </span>
+                        <span className="font-bold">
+                          {formatSats(executionPreview.totalCost)}
+                        </span>
+                      </div>
+                      {orderType === "MARKET" && (
+                        <>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground font-medium">
+                              Slippage:
+                            </span>
+                            <span
+                              className={
+                                executionPreview.slippage > 2
+                                  ? "text-primary font-bold"
+                                  : "font-bold"
+                              }
+                            >
+                              {executionPreview.slippage.toFixed(2)}%
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground font-medium">
+                              Levels:
+                            </span>
+                            <span className="font-bold">
+                              {executionPreview.levels.length}
+                            </span>
+                          </div>
+                        </>
+                      )}
                     </div>
                   )}
 
-                {successMessage && (
-                  <p className="text-sm text-green-500 font-bold">{successMessage}</p>
-                )}
-                {errorMessage && (
-                  <p className="text-sm text-destructive font-bold">{errorMessage}</p>
-                )}
-                <Button
-                  className="w-full"
-                  type="submit"
-                  disabled={
-                    isProcessing ||
-                    placeOrderMutation.isPending ||
-                    (orderType === "MARKET" &&
-                      executionPreview !== null &&
-                      !executionPreview.feasible)
-                  }
-                >
-                  {isProcessing
-                    ? "Processing..."
-                    : orderType === "MARKET"
-                    ? "Execute Market Order"
-                    : "Place Limit Order"}
-                </Button>
-                {isProcessing && (
-                  <p className="text-xs text-muted-foreground text-center">
-                    Checking balances and preparing order...
-                  </p>
-                )}
-              </form>
-            </CardContent>
-          </Card>
+                  {executionPreview &&
+                    !executionPreview.feasible &&
+                    orderType === "MARKET" && (
+                      <div className="rounded-xl bg-destructive/10 border-2 border-destructive/20 p-4 text-sm text-destructive font-bold">
+                        {executionPreview.reason ||
+                          "Cannot execute market order"}
+                      </div>
+                    )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Oracle feed</CardTitle>
-              <CardDescription>
-                Pending stats tracked by the backend oracle adapter.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Total orders</span>
-                <span className="font-semibold">
-                  {stats?.totalOrders ?? "—"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Open orders</span>
-                <span className="font-semibold">
-                  {stats?.openOrders ?? "—"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Trades</span>
-                <span className="font-semibold">
-                  {stats?.totalTrades ?? "—"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Last price</span>
-                <span className="font-semibold">
-                  {formatPrice(stats?.lastPrice)}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
+                  {executionPreview &&
+                    !executionPreview.feasible &&
+                    orderType === "LIMIT" && (
+                      <div className="rounded-xl bg-primary/10 border-2 border-primary/20 p-4 text-sm">
+                        <div className="text-primary font-bold">
+                          No {side === "BUY" ? "sellers" : "buyers"}? Your LIMIT
+                          order will provide liquidity until someone matches.
+                        </div>
+                      </div>
+                    )}
+
+                  {successMessage && (
+                    <p className="text-sm text-green-500 font-bold">
+                      {successMessage}
+                    </p>
+                  )}
+                  {errorMessage && (
+                    <p className="text-sm text-destructive font-bold">
+                      {errorMessage}
+                    </p>
+                  )}
+                  <Button
+                    className="w-full"
+                    type="submit"
+                    disabled={
+                      isProcessing ||
+                      placeOrderMutation.isPending ||
+                      (orderType === "MARKET" &&
+                        executionPreview !== null &&
+                        !executionPreview.feasible)
+                    }
+                  >
+                    {isProcessing
+                      ? "Processing..."
+                      : orderType === "MARKET"
+                      ? "Execute Market Order"
+                      : "Place Limit Order"}
+                  </Button>
+                  {isProcessing && (
+                    <p className="text-xs text-muted-foreground text-center">
+                      Checking balances and preparing order...
+                    </p>
+                  )}
+                </form>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Oracle feed</CardTitle>
+                <CardDescription>
+                  Pending stats tracked by the backend oracle adapter.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Total orders</span>
+                  <span className="font-semibold">
+                    {stats?.totalOrders ?? "—"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Open orders</span>
+                  <span className="font-semibold">
+                    {stats?.openOrders ?? "—"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Trades</span>
+                  <span className="font-semibold">
+                    {stats?.totalTrades ?? "—"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Last price</span>
+                  <span className="font-semibold">
+                    {formatPrice(stats?.lastPrice)}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
-      </div>
       </div>
     </>
   );

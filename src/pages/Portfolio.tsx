@@ -6,11 +6,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useWallet } from '@/contexts/WalletContext'
 import { CONTRACT_ADDRESSES } from '@/lib/config'
-import { bufferCV, cvToValue, principalCV, uintCV } from '@stacks/transactions'
+import { bufferCV, principalCV, uintCV } from '@stacks/transactions'
 import { hexToBytes } from '@stacks/common'
 import { apiRequest } from '@/api/client'
-import type { Market } from '@/types/api'
-import { checkMergeablePairs, waitForTransactionConfirmation } from '@/utils/stacksHelpers'
+import { waitForTransactionConfirmation } from '@/utils/stacksHelpers'
 import { Wallet } from 'lucide-react'
 
 interface PositionBalance {
@@ -38,11 +37,12 @@ interface MergeableMarket {
 }
 
 export function Portfolio() {
-  const { isConnected, userData, readContract, callContract } = useWallet()
+  const { isConnected, userData, callContract } = useWallet()
   const address = userData?.addresses?.find(addr => addr.symbol === 'STX')?.address
   const [positions, setPositions] = useState<PositionBalance[]>([])
   const [loading, setLoading] = useState(true)
   const [totalValue, setTotalValue] = useState(0)
+  const [collateralBalance, setCollateralBalance] = useState<bigint>(0n)
   const [mergeableMarkets, setMergeableMarkets] = useState<MergeableMarket[]>([])
   const [merging, setMerging] = useState(false)
   const [mergeMessage, setMergeMessage] = useState<string>()
@@ -62,109 +62,81 @@ export function Portfolio() {
     try {
       setLoading(true)
 
-      // Fetch all markets from the API
-      const data = await apiRequest<{ success: boolean; markets: Market[] }>('/api/markets')
-      const markets = data.markets || []
+      const portfolio = await apiRequest<{
+        success: boolean
+        positions: Array<{
+          marketId: string
+          conditionId: string
+          question?: string
+          yesPositionId: string
+          noPositionId: string
+          yesBalance: string
+          noBalance: string
+          yesPrice: string
+          noPrice: string
+        }>
+        collateralBalance: string
+      }>(`/api/portfolio/${address}`)
 
-      const [contractAddress, contractName] = CONTRACT_ADDRESSES.CONDITIONAL_TOKENS.split('.')
+      const priceScale = 1_000_000n
       const positionBalances: PositionBalance[] = []
       const mergeable: MergeableMarket[] = []
 
-      // Check balance for each market's YES and NO positions
-      for (const market of markets) {
-        // Check YES balance
-        try {
-          const yesResult = await readContract(
-            contractAddress,
-            contractName,
-            'balance-of',
-            [
-              principalCV(address),
-              bufferCV(hexToBytes(market.yesPositionId.slice(2)))
-            ]
-          )
+      for (const entry of portfolio.positions || []) {
+        const yesBalance = BigInt(entry.yesBalance)
+        const noBalance = BigInt(entry.noBalance)
+        const yesPrice = BigInt(entry.yesPrice ?? '0')
+        const noPrice = BigInt(entry.noPrice ?? '0')
 
-          const yesBalance = cvToValue(yesResult)
-          const yesBalanceNum = typeof yesBalance === 'bigint' ? Number(yesBalance) : 0
-
-          if (yesBalanceNum > 0) {
-            positionBalances.push({
-              marketId: market.marketId,
-              question: market.question,
-              conditionId: market.conditionId,
-              outcome: 'YES',
-              positionId: market.yesPositionId,
-              balance: yesBalanceNum,
-              currentPrice: market.yesPrice || 0,
-              value: (yesBalanceNum * (market.yesPrice || 0)) / 100
-            })
-          }
-        } catch (error) {
-          console.error(`Error fetching YES balance for ${market.marketId}:`, error)
+        if (yesBalance > 0n) {
+          const yesValueMicro = (yesBalance * yesPrice) / priceScale
+          const yesValue = Number(yesValueMicro) / 1_000_000
+          positionBalances.push({
+            marketId: entry.marketId,
+            question: entry.question || '—',
+            conditionId: entry.conditionId,
+            outcome: 'YES',
+            positionId: entry.yesPositionId,
+            balance: Number(yesBalance),
+            currentPrice: Number(entry.yesPrice ?? '0'),
+            value: yesValue,
+          })
         }
 
-        // Check NO balance
-        try {
-          const noResult = await readContract(
-            contractAddress,
-            contractName,
-            'balance-of',
-            [
-              principalCV(address),
-              bufferCV(hexToBytes(market.noPositionId.slice(2)))
-            ]
-          )
+        if (noBalance > 0n) {
+          const noValueMicro = (noBalance * noPrice) / priceScale
+          const noValue = Number(noValueMicro) / 1_000_000
+          positionBalances.push({
+            marketId: entry.marketId,
+            question: entry.question || '—',
+            conditionId: entry.conditionId,
+            outcome: 'NO',
+            positionId: entry.noPositionId,
+            balance: Number(noBalance),
+            currentPrice: Number(entry.noPrice ?? '0'),
+            value: noValue,
+          })
+        }
 
-          const noBalance = cvToValue(noResult)
-          const noBalanceNum = typeof noBalance === 'bigint' ? Number(noBalance) : 0
-
-          if (noBalanceNum > 0) {
-            positionBalances.push({
-              marketId: market.marketId,
-              question: market.question,
-              conditionId: market.conditionId,
-              outcome: 'NO',
-              positionId: market.noPositionId,
-              balance: noBalanceNum,
-              currentPrice: market.noPrice || 0,
-              value: (noBalanceNum * (market.noPrice || 0)) / 100
-            })
-          }
-        } catch (error) {
-          console.error(`Error fetching NO balance for ${market.marketId}:`, error)
+        const mergeableAmount = yesBalance < noBalance ? yesBalance : noBalance
+        if (mergeableAmount > 0n) {
+          mergeable.push({
+            marketId: entry.marketId,
+            question: entry.question || '—',
+            conditionId: entry.conditionId,
+            yesPositionId: entry.yesPositionId,
+            noPositionId: entry.noPositionId,
+            mergeableAmount: Number(mergeableAmount) / 1_000_000,
+            yesBalance: Number(yesBalance) / 1_000_000,
+            noBalance: Number(noBalance) / 1_000_000,
+          })
         }
       }
 
       setPositions(positionBalances)
       setTotalValue(positionBalances.reduce((sum, p) => sum + p.value, 0))
-
-      // Check for mergeable pairs across all markets
-      for (const market of markets) {
-        try {
-          const { mergeableAmount, yesBalance, noBalance } = await checkMergeablePairs({
-            userAddress: address,
-            yesPositionId: market.yesPositionId,
-            noPositionId: market.noPositionId,
-          })
-
-          if (mergeableAmount > 0) {
-            mergeable.push({
-              marketId: market.marketId,
-              question: market.question,
-              conditionId: market.conditionId,
-              yesPositionId: market.yesPositionId,
-              noPositionId: market.noPositionId,
-              mergeableAmount: Number(mergeableAmount) / 1_000_000,
-              yesBalance: Number(yesBalance) / 1_000_000,
-              noBalance: Number(noBalance) / 1_000_000,
-            })
-          }
-        } catch (error) {
-          console.error(`Error checking mergeable pairs for ${market.marketId}:`, error)
-        }
-      }
-
       setMergeableMarkets(mergeable)
+      setCollateralBalance(BigInt(portfolio.collateralBalance ?? '0'))
     } catch (error) {
       console.error('Error loading positions:', error)
     } finally {
@@ -273,7 +245,7 @@ export function Portfolio() {
         </Button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="space-y-1">
             <CardDescription className="uppercase text-xs tracking-wide">
@@ -301,6 +273,17 @@ export function Portfolio() {
             </CardDescription>
             <CardTitle className="text-3xl">
               {new Set(positions.map(p => p.marketId)).size}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+
+        <Card>
+          <CardHeader className="space-y-1">
+            <CardDescription className="uppercase text-xs tracking-wide">
+              Escrowed Collateral
+            </CardDescription>
+            <CardTitle className="text-3xl">
+              {(Number(collateralBalance) / 1_000_000).toFixed(4)} sBTC
             </CardTitle>
           </CardHeader>
         </Card>

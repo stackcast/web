@@ -215,5 +215,38 @@ export async function checkMergeablePairs(params: {
 }
 
 /**
+ * Fetch escrowed collateral balance (sBTC) available for mint settlements.
+ */
+export async function getCollateralBalance(userAddress: string): Promise<bigint> {
+  try {
+    const [contractAddress, contractName] =
+      CONTRACT_ADDRESSES.CTF_EXCHANGE.split(".");
+
+    const payload = {
+      contractAddress,
+      contractName,
+      functionName: "get-collateral-balance",
+      functionArgs: [cvToHex(principalCV(userAddress))],
+      senderAddress: userAddress,
+    };
+
+    const { result } = await apiRequest<{ result: string }>(
+      "/api/stacks/read",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+
+    const clarityValue = hexToCV(result);
+    const balance = cvToValue(clarityValue);
+    return BigInt(balance as bigint | number | string);
+  } catch (error) {
+    console.error("Error fetching collateral balance:", error);
+    return 0n;
+  }
+}
+
+/**
  * Check if the conditional tokens contract has operator approval granted to the exchange contract.
  */
